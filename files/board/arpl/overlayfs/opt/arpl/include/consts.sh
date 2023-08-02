@@ -1,5 +1,5 @@
 
-ARPL_VERSION="23.8.1b"
+ARPL_VERSION="23.8.2"
 ARPL_TITLE="Arc ${ARPL_VERSION}"
 
 # Define paths
