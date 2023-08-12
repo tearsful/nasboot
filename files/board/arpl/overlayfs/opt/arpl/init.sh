@@ -84,6 +84,7 @@ if [ ! -f "${USER_CONFIG_FILE}" ]; then
   writeConfigKey "synoinfo" "{}" "${USER_CONFIG_FILE}"
   writeConfigKey "addons" "{}" "${USER_CONFIG_FILE}"
   writeConfigKey "addons.acpid" "" "${USER_CONFIG_FILE}"
+  writeConfigKey "extensions" "{}" "${USER_CONFIG_FILE}"
   writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
   writeConfigKey "arc" "{}" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.directboot" "false" "${USER_CONFIG_FILE}"
@@ -129,6 +130,7 @@ elif [ "${NOTSETMAC}" = "true" ]; then
     # Write real Mac to cmdline config
     writeConfigKey "cmdline.mac${N}" "${MACR}" "${USER_CONFIG_FILE}"
   done
+  echo -e "NET: Not set Boot MAC enabled"
 fi
 echo
 
@@ -242,5 +244,6 @@ mkdir -p "${MODULES_PATH}"
 
 # Load arc
 install-addons.sh
+install-extensions.sh
 sleep 3
 arc.sh
