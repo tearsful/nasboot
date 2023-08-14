@@ -30,11 +30,11 @@ fi
 # Get DSM Data from Config
 MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
 PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
-PLATFORM="$(readModelKey "${MODEL}" "platform")"
 LAYOUT="$(readConfigKey "layout" "${USER_CONFIG_FILE}")"
 KEYMAP="$(readConfigKey "keymap" "${USER_CONFIG_FILE}")"
 LKM="$(readConfigKey "lkm" "${USER_CONFIG_FILE}")"
 if [ -n "${MODEL}" ]; then
+  PLATFORM="$(readModelKey "${MODEL}" "platform")"
   DT="$(readModelKey "${MODEL}" "dt")"
 fi
 
@@ -48,11 +48,6 @@ BOOTIPWAIT="$(readConfigKey "arc.bootipwait" "${USER_CONFIG_FILE}")"
 REMAP="$(readConfigKey "arc.remap" "${USER_CONFIG_FILE}")"
 NOTSETMAC="$(readConfigKey "arc.notsetmac" "${USER_CONFIG_FILE}")"
 KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
-
-# Add Kernelload to old configs
-if [ -z "${KERNELLOAD}" ]; then
-  writeConfigKey "arc.kernelload" "power" "${USER_CONFIG_FILE}"
-fi
 
 # Reset DirectDSM if User boot to Config
 if [ "${DIRECTDSM}" = "true" ]; then
@@ -87,13 +82,13 @@ function backtitle() {
     BACKTITLE+=" Patch: N"
   fi
   BACKTITLE+=" |"
-  if [ -n "${CONFDONE}" ]; then
+  if [ "${CONFDONE}" = "true" ]; then
     BACKTITLE+=" Config: Y"
   else
     BACKTITLE+=" Config: N"
   fi
   BACKTITLE+=" |"
-  if [ -n "${BUILDDONE}" ]; then
+  if [ "${BUILDDONE}" = "true" ]; then
     BACKTITLE+=" Build: Y"
   else
     BACKTITLE+=" Build: N"
@@ -202,8 +197,8 @@ function arcMenu() {
     writeConfigKey "productver" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.paturl" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.pathash" "" "${USER_CONFIG_FILE}"
-    deleteConfigKey "arc.confdone" "${USER_CONFIG_FILE}"
-    deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.confdone" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
     if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
       # Delete old files
@@ -265,7 +260,7 @@ function arcbuild() {
   if [ "${ONLYVERSION}" != "true" ]; then
     arcsettings
   else
-    deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
     BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   fi
 }
@@ -290,8 +285,6 @@ function arcsettings() {
         SN="$(readModelKey "${MODEL}" "arc.serial")"
         writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
         writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-        writeConfigKey "extensions.shr" "" "${USER_CONFIG_FILE}"
-        writeConfigKey "extensions.oobctl" "" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.patch" "true" "${USER_CONFIG_FILE}"
         break
       elif [ "${resp}" = "2" ]; then
@@ -300,23 +293,17 @@ function arcsettings() {
         writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
         writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-        writeConfigKey "extensions.shr" "" "${USER_CONFIG_FILE}"
-        writeConfigKey "extensions.oobctl" "" "${USER_CONFIG_FILE}"
         break
       fi
     done
   elif [ "${ARCRECOVERY}" = "true" ] && [ "${ARCAV}" = "Arc" ]; then
     writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-    writeConfigKey "extensions.shr" "" "${USER_CONFIG_FILE}"
-    writeConfigKey "extensions.oobctl" "" "${USER_CONFIG_FILE}"
   else
     # Generate random serial
     SN="$(generateSerial "${MODEL}")"
     writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
     writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-    writeConfigKey "extensions.shr" "" "${USER_CONFIG_FILE}"
-    writeConfigKey "extensions.oobctl" "" "${USER_CONFIG_FILE}"
   fi
   ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "Arc Config" \
@@ -372,8 +359,6 @@ function arcnetdisk() {
   EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "DSM Extensions" \
     --msgbox "DSM Extensions selected:\n${EXTENSIONSINFO}" 0 0
-  # Config is done
-  writeConfigKey "arc.confdone" "1" "${USER_CONFIG_FILE}"
   dialog --backtitle "$(backtitle)" --title "Arc Config" \
     --infobox "Configuration successful!" 0 0
   sleep 1
@@ -394,6 +379,8 @@ function arcnetdisk() {
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
       --msgbox "WARN: Your CPU does not have AES Support for Hardwareencryption in DSM." 0 0
   fi
+  # Config is done
+  writeConfigKey "arc.confdone" "true" "${USER_CONFIG_FILE}"
   # Ask for Build
   while true; do
     dialog --clear --backtitle "$(backtitle)" \
@@ -554,7 +541,7 @@ function make() {
   sleep 3
   # Build is done
   writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
-  writeConfigKey "arc.builddone" "1" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "true" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   # Ask for Boot
   while true; do
@@ -598,7 +585,7 @@ function editUserConfig() {
     rm -f "${MOD_ZIMAGE_FILE}"
     rm -f "${MOD_RDGZ_FILE}"
   fi
-  deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
@@ -641,7 +628,7 @@ function addonMenu() {
   ADDONSINFO="$(readConfigEntriesArray "addons" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "Addons" \
     --msgbox "Loader Addons selected:\n${ADDONSINFO}" 0 0
-  deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
@@ -684,7 +671,7 @@ function extensionMenu() {
   EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "DSM Extensions" \
     --msgbox "DSM Extensions selected:\n${EXTENSIONSINFO}" 0 0
-  deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
@@ -740,7 +727,7 @@ function modulesMenu() {
           USERMODULES["${ID}"]=""
           writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
         done
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       3)
@@ -753,7 +740,7 @@ function modulesMenu() {
           USERMODULES["${ID}"]=""
           writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
         done <<<${ALLMODULES}
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       4)
@@ -762,7 +749,7 @@ function modulesMenu() {
         writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
         unset USERMODULES
         declare -A USERMODULES
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       5)
@@ -786,7 +773,7 @@ function modulesMenu() {
           USERMODULES["${ID}"]=""
           writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
         done
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       6)
@@ -822,7 +809,7 @@ function modulesMenu() {
           dialog --backtitle "$(backtitle)" --title "Add external module" --aspect 18 \
             --msgbox "File format not recognized!" 0 0
         fi
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       0)
@@ -870,7 +857,7 @@ function cmdlineMenu() {
         VALUE="$(<"${TMP_PATH}/resp")"
         CMDLINE[${NAME}]="${VALUE}"
         writeConfigKey "cmdline.${NAME}" "${VALUE}" "${USER_CONFIG_FILE}"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       2)
@@ -892,7 +879,7 @@ function cmdlineMenu() {
           unset 'CMDLINE[${I}]'
           deleteConfigKey "cmdline.${I}" "${USER_CONFIG_FILE}"
         done
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       3)
@@ -915,7 +902,7 @@ function cmdlineMenu() {
         done
         SN="${SERIAL}"
         writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       4)
@@ -954,7 +941,7 @@ function cmdlineMenu() {
             [ $? -ne 0 ] && break
           fi
         done
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       5)
@@ -962,7 +949,7 @@ function cmdlineMenu() {
         writeConfigKey "cmdline.tsc" "reliable" "${USER_CONFIG_FILE}"
         dialog --backtitle "$(backtitle)" --title "CPU Fix" \
           --aspect 18 --msgbox "Fix added to Cmdline" 0 0
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       6)
@@ -970,7 +957,7 @@ function cmdlineMenu() {
         writeConfigKey "cmdline.crashkernel" "192M" "${USER_CONFIG_FILE}"
         dialog --backtitle "$(backtitle)" --title "RAM Fix" \
           --aspect 18 --msgbox "Fix added to Cmdline" 0 0
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       7)
@@ -1030,7 +1017,7 @@ function synoinfoMenu() {
         VALUE="$(<"${TMP_PATH}/resp")"
         SYNOINFO[${NAME}]="${VALUE}"
         writeConfigKey "synoinfo.${NAME}" "${VALUE}" "${USER_CONFIG_FILE}"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       2)
@@ -1052,7 +1039,7 @@ function synoinfoMenu() {
           unset 'SYNOINFO[${I}]'
           deleteConfigKey "synoinfo.${I}" "${USER_CONFIG_FILE}"
         done
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       3)
@@ -1098,7 +1085,7 @@ function keymapMenu() {
 function usbMenu() {
   NEXT="1"
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
-  if [ -n "${CONFDONE}" ]; then
+  if [ "${CONFDONE}" = "true" ]; then
     while true; do
       dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
         1 "Mount USB as Internal" \
@@ -1113,7 +1100,7 @@ function usbMenu() {
           writeConfigKey "synoinfo.usbportcfg" "0xff0000" "${USER_CONFIG_FILE}"
           writeConfigKey "synoinfo.internalportcfg" "0xffffff" "${USER_CONFIG_FILE}"
           writeConfigKey "arc.usbmount" "true" "${USER_CONFIG_FILE}"
-          deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+          writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
           BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
           dialog --backtitle "$(backtitle)" --title "Mount USB as Internal" \
             --aspect 18 --msgbox "Mount USB as Internal - successful!" 0 0
@@ -1124,7 +1111,7 @@ function usbMenu() {
           deleteConfigKey "synoinfo.usbportcfg" "${USER_CONFIG_FILE}"
           deleteConfigKey "synoinfo.internalportcfg" "${USER_CONFIG_FILE}"
           writeConfigKey "arc.usbmount" "false" "${USER_CONFIG_FILE}"
-          deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+          writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
           BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
           dialog --backtitle "$(backtitle)" --title "Mount USB as Normal" \
             --aspect 18 --msgbox "Mount USB as Normal - successful!" 0 0
@@ -1140,7 +1127,7 @@ function usbMenu() {
 function backupMenu() {
   NEXT="1"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
-  if [ -n "${BUILDDONE}" ]; then
+  if [ "${BUILDDONE}" = "true" ]; then
     while true; do
       dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
         1 "Backup Config" \
@@ -1203,7 +1190,7 @@ function backupMenu() {
           ONLYVERSION="true"
           arcbuild
           CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
-          deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+          writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
           BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
           ;;
         3)
@@ -1352,8 +1339,8 @@ function backupMenu() {
                   writeConfigKey "productver" "${majorversion}.${minorversion}" "${USER_CONFIG_FILE}"
                   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
                   if [ -n "${PRODUCTVER}" ]; then
-                    cp "${DSMROOT_PATH}/.syno/patch/zImage" "${SLPART_PATH}"
-                    cp "${DSMROOT_PATH}/.syno/patch/rd.gz" "${SLPART_PATH}"
+                    cp -f "${DSMROOT_PATH}/.syno/patch/zImage" "${SLPART_PATH}"
+                    cp -f "${DSMROOT_PATH}/.syno/patch/rd.gz" "${SLPART_PATH}"
                     MSG="Installation found:\nModel: ${MODEL}\nVersion: ${PRODUCTVER}"
                     SN=$(_get_conf_kv SN "${DSMROOT_PATH}/etc/synoinfo.conf")
                     if [ -n "${SN}" ]; then
@@ -1427,7 +1414,7 @@ function backupMenu() {
           ONLYVERSION="true"
           arcbuild
           CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
-          deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+          writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
           BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
           ;;
         2)
@@ -1556,6 +1543,8 @@ function backupMenu() {
                       --aspect 18 --msgbox "${MSG}" 0 0
                     ARCRECOVERY="true"
                     arcbuild
+                    CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
+                    BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
                   fi
                 fi
               fi
@@ -1620,7 +1609,7 @@ function updateMenu() {
             --msgbox "Error extracting update file" 0 0
           return 1
         fi
-        if [ -f "${USER_CONFIG_FILE}" ] && [ -n "${MODEL}" ]; then
+        if [ -f "${USER_CONFIG_FILE}" ] && [ "${CONFDONE}" = "true" ]; then
           GENHASH=$(cat ${USER_CONFIG_FILE} | curl -s -F "content=<-" http://dpaste.com/api/v2/ | cut -c 19-)
           dialog --backtitle "$(backtitle)" --title "Full Upgrade Loader" --aspect 18 \
           --msgbox "Backup config successful!\nWrite down your Code: ${GENHASH}\n\nAfter Reboot use: Backup - Restore with Code." 0 0
@@ -1735,7 +1724,7 @@ function updateMenu() {
           rm -f "${ADDONS_PATH}/${ADDON}.addon"
         done
         rm -f "${TMP_PATH}/addons.zip"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         dialog --backtitle "$(backtitle)" --title "Update Loader Addons" --aspect 18 \
           --msgbox "Addons updated with success! ${TAG}" 0 0
@@ -1772,7 +1761,7 @@ function updateMenu() {
           rm -f "${EXTENSIONS_PATH}/${EXTENSION}.extension"
         done
         rm -f "${TMP_PATH}/extensions.zip"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         dialog --backtitle "$(backtitle)" --title "Update DSM Extensions" --aspect 18 \
           --msgbox "Extensions updated with success! ${TAG}" 0 0
@@ -1794,9 +1783,12 @@ function updateMenu() {
             --msgbox "Error downloading latest version" 0 0
           return 1
         fi
+        MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
         PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
-        PLATFORM="$(readModelKey "${MODEL}" "platform")"
-        KVER="$(readModelKey "${MODEL}" "productvers.[${PRODUCTVER}].kver")"
+        if [ -n "${MODEL}" ]; then
+          PLATFORM="$(readModelKey "${MODEL}" "platform")"
+          KVER="$(readModelKey "${MODEL}" "productvers.[${PRODUCTVER}].kver")"
+        fi
         rm -rf "${MODULES_PATH}"
         mkdir -p "${MODULES_PATH}"
         unzip -o "${TMP_PATH}/modules.zip" -d "${MODULES_PATH}" >/dev/null 2>&1
@@ -1808,7 +1800,7 @@ function updateMenu() {
           done < <(getAllModules "${PLATFORM}" "${KVER}")
         fi
         rm -f "${TMP_PATH}/modules.zip"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         dialog --backtitle "$(backtitle)" --title "Update DSM Modules" --aspect 18 \
           --msgbox "Modules updated to ${TAG} with success!" 0 0
@@ -1836,7 +1828,7 @@ function updateMenu() {
         mkdir -p "${MODEL_CONFIG_PATH}"
         unzip -o "${TMP_PATH}/configs.zip" -d "${MODEL_CONFIG_PATH}" >/dev/null 2>&1
         rm -f "${TMP_PATH}/configs.zip"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         dialog --backtitle "$(backtitle)" --title "Update DSM Configs" --aspect 18 \
           --msgbox "Configs updated with success! ${TAG}" 0 0
@@ -1864,7 +1856,7 @@ function updateMenu() {
         mkdir -p "${LKM_PATH}"
         unzip -o "${TMP_PATH}/rp-lkms.zip" -d "${LKM_PATH}" >/dev/null 2>&1
         rm -f "${TMP_PATH}/rp-lkms.zip"
-        deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         dialog --backtitle "$(backtitle)" --title "Update Loader LKMs" --aspect 18 \
           --msgbox "LKMs updated with success! ${TAG}" 0 0
@@ -1881,7 +1873,7 @@ function storageMenu() {
   DT="$(readModelKey "${MODEL}" "dt")"
   # Get Portmap for Loader
   getmap
-  deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
@@ -1890,7 +1882,7 @@ function storageMenu() {
 function networkMenu() {
   # Get Network Config for Loader
   getnet
-  deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
@@ -1904,7 +1896,7 @@ function sysinfo() {
   [ -d /sys/firmware/efi ] && BOOTSYS="EFI" || BOOTSYS="Legacy"
   VENDOR=$(dmidecode -s system-product-name)
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
-  if [ -n "${CONFDONE}" ]; then
+  if [ "${CONFDONE}" = "true" ]; then
     MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
     PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
     PLATFORM="$(readModelKey "${MODEL}" "platform")"
@@ -1929,13 +1921,13 @@ function sysinfo() {
   fi
   NETRL_NUM="$(ls /sys/class/net/ | grep eth | wc -l)"
   IPLIST="$(ip route 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')"
-  if [ "${REMAP}" = "1" ] || [ "${REMAP}" = "2" ]; then
+  if [ "${REMAP}" = "acports" ] || [ "${REMAP}" = "maxports" ]; then
     PORTMAP="$(readConfigKey "cmdline.SataPortMap" "${USER_CONFIG_FILE}")"
     DISKMAP="$(readConfigKey "cmdline.DiskIdxMap" "${USER_CONFIG_FILE}")"
-  elif [ "${REMAP}" = "3" ]; then
+  elif [ "${REMAP}" = "remap" ]; then
     PORTMAP="$(readConfigKey "cmdline.sata_remap" "${USER_CONFIG_FILE}")"
   fi
-  if [ -n "${CONFDONE}" ]; then
+  if [ "${CONFDONE}" = "true" ]; then
     ADDONSINFO="$(readConfigEntriesArray "addons" "${USER_CONFIG_FILE}")"
     EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
   fi
@@ -1962,32 +1954,25 @@ function sysinfo() {
   TEXT+="\nModel | Platform: \Zb${MODEL} | ${PLATFORM}\Zn"
   TEXT+="\nDSM | Kernel | LKM: \Zb${PRODUCTVER} | ${KVER} | ${LKM}\Zn"
   TEXT+="\n\Z4>> Loader\Zn"
-  if [ -n "${CONFDONE}" ]; then
-    TEXT+="\nConfig | Build: \ZbComplete | "
-  else
-    TEXT+="\nConfig | Build: \ZbIncomplete | "
-  fi
-  if [ -n "${BUILDDONE}" ]; then
-    TEXT+="Complete\Zn"
-  else
-    TEXT+="Incomplete\Zn"
-  fi
+  TEXT+="\nConfig | Build: \Zb${CONFDONE} | ${BUILDDONE}\Zn"
   TEXT+="\nArcpatch: \Zb${ARCPATCH}\Zn"
   TEXT+="\nDirectboot | DirectDSM: \Zb${DIRECTBOOT} | ${DIRECTDSM}\Zn"
-  TEXT+="\nLoad Kernel: \Zb${KERNELLOAD}\Zn"
+  TEXT+="\nKernelload: \Zb${KERNELLOAD}\Zn"
   TEXT+="\n\Z4>> Extensions\Zn"
   TEXT+="\nLoader Addons selected: \Zb${ADDONSINFO}\Zn"
   TEXT+="\nDSM Extensions selected: \Zb${EXTENSIONSINFO}\Zn"
   TEXT+="\nArc Modules loaded: \Zb${MODULESINFO}\Zn"
   TEXT+="\n\Z4>> Settings\Zn"
-  if [ "${REMAP}" = "1" ] || [ "${REMAP}" == "2" ]; then
+  if [ "${REMAP}" = "acports" ] || [ "${REMAP}" = "maxports" ]; then
     TEXT+="\nSataPortMap | DiskIdxMap: \Zb${PORTMAP} | ${DISKMAP}\Zn"
-  elif [ "${REMAP}" = "3" ]; then
+  elif [ "${REMAP}" = "remap" ]; then
     TEXT+="\nSataRemap: \Zb${PORTMAP}\Zn"
-  elif [ "${REMAP}" = "0" ]; then
+  elif [ "${REMAP}" = "user" ]; then
     TEXT+="\nPortMap: \Zb"User"\Zn"
   fi
-  TEXT+="\nUSB Mount: \Zb${USBMOUNT}\Zn\n"
+  if [ "${PLATFORM}" = "broadwellnk" ]; then
+    TEXT+="\nUSB Mount: \Zb${USBMOUNT}\Zn\n"
+  fi
   # Check for Controller // 104=RAID // 106=SATA // 107=SAS
   TEXT+="\n\Z4> Storage\Zn"
   # Get Information for Sata Controller
@@ -2123,7 +2108,7 @@ function mptFix() {
       --yesno "Warning:\nDo you want to modify your Config to fix LSI HBA's. Continue?" 0 0
   [ $? -ne 0 ] && return
   deleteConfigKey "modules.scsi_transport_sas" "${USER_CONFIG_FILE}"
-  deleteConfigKey "arc.builddone" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
@@ -2205,8 +2190,8 @@ function formatdisks() {
 # Calls boot.sh to boot into DSM kernel/ramdisk
 function boot() {
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
-  [ "${BUILDDONE}" -ne "1" ] && dialog --backtitle "$(backtitle)" --title "Alert" \
-    --yesno "Config changed, would you like to rebuild the loader?" 0 0
+  [ "${BUILDDONE}" = "false" ] && dialog --backtitle "$(backtitle)" --title "Alert" \
+    --yesno "Config changed, you need to rebuild the loader?" 0 0
   if [ $? -eq 0 ]; then
     make || return
   fi
@@ -2221,7 +2206,7 @@ function boot() {
 ###############################################################################
 ###############################################################################
 
-if [ "x$1" = "xb" -a -n "${MODEL}" -a -n "${PRODUCTVER}" ]; then
+if [ "x$1" = "xb" ] && [ -n "${MODEL}" ] && [ -n "${PRODUCTVER}" ] && [ "${CONFDONE}" = "true" ]; then
   install-addons.sh
   install-extensions.sh
   make
@@ -2233,25 +2218,25 @@ fi
 while true; do
   echo "= \"\Z4========== Main ==========\Zn \" "                                            >"${TMP_PATH}/menu"
   echo "1 \"Choose Model for Loader \" "                                                    >>"${TMP_PATH}/menu"
-  if [ -n "${CONFDONE}" ]; then
+  if [ "${CONFDONE}" = "true" ]; then
     echo "5 \"Build Loader \" "                                                             >>"${TMP_PATH}/menu"
   fi
-  if [ -n "${BUILDDONE}" ]; then
+  if [ "${BUILDDONE}" = "true" ]; then
     echo "6 \"Boot Loader \" "                                                              >>"${TMP_PATH}/menu"
   fi
   echo "= \"\Z4========== Info ==========\Zn \" "                                           >>"${TMP_PATH}/menu"
   echo "a \"Sysinfo \" "                                                                    >>"${TMP_PATH}/menu"
-  if [ -n "${CONFDONE}" ]; then
+  if [ "${CONFDONE}" = "true" ]; then
     echo "= \"\Z4========= System =========\Zn \" "                                         >>"${TMP_PATH}/menu"
     echo "2 \"Loader Addons \" "                                                            >>"${TMP_PATH}/menu"
     echo "3 \"DSM Extensions \" "                                                           >>"${TMP_PATH}/menu"
     echo "4 \"DSM Modules \" "                                                              >>"${TMP_PATH}/menu"
-    if [ -n "${ARCOPTS}" ]; then
+    if [ "${ARCOPTS}" = "true" ]; then
       echo "7 \"\Z1Hide Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     else
       echo "7 \"\Z1Show Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${ARCOPTS}" ]; then
+    if [ "${ARCOPTS}" = "true" ]; then
       echo "= \"\Z4========== Arc ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "v \"Change DSM Version \" "                                                     >>"${TMP_PATH}/menu"
       if [ "${DT}" != "true" ] && [ "${SATACONTROLLER}" -gt 0 ]; then
@@ -2272,35 +2257,35 @@ while true; do
       fi
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${ADVOPTS}" ]; then
+    if [ "${ADVOPTS}" = "true" ]; then
       echo "8 \"\Z1Hide Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
     else
       echo "8 \"\Z1Show Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${ADVOPTS}" ]; then
+    if [ "${ADVOPTS}" = "true" ]; then
       echo "= \"\Z4======== Advanced =======\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "f \"Cmdline \" "                                                                >>"${TMP_PATH}/menu"
       echo "g \"Synoinfo \" "                                                               >>"${TMP_PATH}/menu"
       echo "h \"Edit User Config \" "                                                       >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${DSMOPTS}" ]; then
+    if [ "${DSMOPTS}" = "true" ]; then
       echo "9 \"\Z1Hide DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     else
       echo "9 \"\Z1Show DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${DSMOPTS}" ]; then
+    if [ "${DSMOPTS}" = "true" ]; then
       echo "= \"\Z4========== DSM ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "w \"Allow DSM Downgrade \" "                                                    >>"${TMP_PATH}/menu"
       echo "x \"Reset DSM Password \" "                                                     >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${DEVOPTS}" ]; then
+    if [ "${DEVOPTS}" = "true" ]; then
       echo "- \"\Z1Hide Dev Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     else
       echo "- \"\Z1Show Dev Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     fi
-    if [ -n "${DEVOPTS}" ]; then
+    if [ "${DEVOPTS}" = "true" ]; then
       echo "= \"\Z4========== Dev ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "j \"Switch LKM version: \Z4${LKM}\Zn \" "                                       >>"${TMP_PATH}/menu"
       echo "z \"Save Modifications to Disk \" "                                             >>"${TMP_PATH}/menu"
@@ -2330,7 +2315,7 @@ while true; do
     3) extensionMenu; NEXT="3" ;;
     4) modulesMenu; NEXT="4" ;;
     # Arc Section
-    7) [ "${ARCOPTS}" = "" ] && ARCOPTS='1' || ARCOPTS=''
+    7) [ "${ARCOPTS}" = "true" ] && ARCOPTS='false' || ARCOPTS='true'
        ARCOPTS="${ARCOPTS}"
        NEXT="7"
        ;;
@@ -2350,6 +2335,7 @@ while true; do
     b) bootipwaittime; NEXT="b" ;;
     d) [ "${DIRECTBOOT}" = "false" ] && DIRECTBOOT='true' || DIRECTBOOT='false'
       writeConfigKey "arc.directboot" "${DIRECTBOOT}" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
       NEXT="d"
       ;;
     l)
@@ -2358,7 +2344,7 @@ while true; do
       NEXT="l"
       ;;
     # Advanced Section
-    8) [ "${ADVOPTS}" = "" ] && ADVOPTS='1' || ADVOPTS=''
+    8) [ "${ADVOPTS}" = "true" ] && ADVOPTS='false' || ADVOPTS='true'
        ADVOPTS="${ADVOPTS}"
        NEXT="8"
        ;;
@@ -2366,14 +2352,14 @@ while true; do
     g) synoinfoMenu; NEXT="g" ;;
     h) editUserConfig; NEXT="h" ;;
     # DSM Section
-    9) [ "${DSMOPTS}" = "" ] && DSMOPTS='1' || DSMOPTS=''
+    9) [ "${DSMOPTS}" = "true" ] && DSMOPTS='false' || DSMOPTS='true'
       DSMOPTS="${DSMOPTS}"
       NEXT="9"
       ;;
     w) downgradeMenu; NEXT="w" ;;
     x) resetPassword; NEXT="x" ;;
     # Dev Section
-    -) [ "${DEVOPTS}" = "" ] && DEVOPTS='1' || DEVOPTS=''
+    -) [ "${DEVOPTS}" = "true" ] && DEVOPTS='false' || DEVOPTS='true'
       DEVOPTS="${DEVOPTS}"
       NEXT="-"
       ;;
