@@ -14,10 +14,10 @@ LOADER_DEVICE_NAME=$(echo ${LOADER_DISK} | sed 's|/dev/||')
 RAMTOTAL=0
 while read -r -r LINE; do
   RAMSIZE=${LINE}
-  RAMTOTAL=$((${RAMTOTAL}+${RAMSIZE}))
+  RAMTOTAL=$((${RAMTOTAL} + ${RAMSIZE}))
 done < <(dmidecode -t memory | grep -i "Size" | cut -d" " -f2 | grep -i "[1-9]")
-RAMTOTAL=$((${RAMTOTAL}*1024))
-RAMMIN=$((${RAMTOTAL}/2))
+RAMTOTAL=$((${RAMTOTAL} * 1024))
+RAMMIN=$((${RAMTOTAL} / 2))
 
 # Check for Hypervisor
 if grep -q "^flags.*hypervisor.*" /proc/cpuinfo; then
@@ -26,6 +26,9 @@ if grep -q "^flags.*hypervisor.*" /proc/cpuinfo; then
 else
   MACHINE="NATIVE"
 fi
+
+# Set Warning to 0
+WARNON=0
 
 # Get DSM Data from Config
 MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
@@ -139,7 +142,7 @@ function arcMenu() {
       fi
       # Check id model is compatible with CPU
       COMPATIBLE=1
-      if [ "${RESTRICT}" -eq "1" ]; then
+      if [ ${RESTRICT} -eq 1 ]; then
         for F in "$(readModelArray "${M}" "flags")"; do
           if ! grep -q "^flags.*${F}.*" /proc/cpuinfo; then
             COMPATIBLE=0
@@ -148,7 +151,7 @@ function arcMenu() {
           fi
         done
         for F in "$(readModelArray "${M}" "dt")"; do
-          if [ "${DT}" = "true" ] && [ "${SASCONTROLLER}" -gt "0" ]; then
+          if [ "${DT}" = "true" ] && [ ${SASCONTROLLER} -gt 0 ]; then
             COMPATIBLE=0
             FLGNEX=1
             break
@@ -157,10 +160,10 @@ function arcMenu() {
       fi
       [ "${DT}" = "true" ] && DT="DT" || DT=""
       [ "${BETA}" = "true" ] && BETA="Beta" || BETA=""
-      [ "${COMPATIBLE}" -eq "1" ] && echo "${M} \"$(printf "\Zb%-7s\Zn \Zb%-6s\Zn \Zb%-13s\Zn \Zb%-3s\Zn \Zb%-7s\Zn \Zb%-4s\Zn" "${DISKS}" "${CPU}" "${PLATFORM}" "${DT}" "${ARCAV}" "${BETA}")\" ">>"${TMP_PATH}/menu"
+      [ ${COMPATIBLE} -eq 1 ] && echo "${M} \"$(printf "\Zb%-7s\Zn \Zb%-6s\Zn \Zb%-13s\Zn \Zb%-3s\Zn \Zb%-7s\Zn \Zb%-4s\Zn" "${DISKS}" "${CPU}" "${PLATFORM}" "${DT}" "${ARCAV}" "${BETA}")\" ">>"${TMP_PATH}/menu"
     done < <(find "${MODEL_CONFIG_PATH}" -maxdepth 1 -name \*.yml | sort)
-    [ "${FLGBETA}" -eq "0" ] && echo "b \"\Z1Show beta Models\Zn\"" >>"${TMP_PATH}/menu"
-    [ "${FLGNEX}" -eq "1" ] && echo "f \"\Z1Show incompatible Models \Zn\"" >>"${TMP_PATH}/menu"
+    [ ${FLGBETA} -eq 0 ] && echo "b \"\Z1Show beta Models\Zn\"" >>"${TMP_PATH}/menu"
+    [ ${FLGNEX} -eq 1 ] && echo "f \"\Z1Show incompatible Models \Zn\"" >>"${TMP_PATH}/menu"
     dialog --backtitle "$(backtitle)" --colors --menu "Choose Model for Loader" 0 62 0 \
       --file "${TMP_PATH}/menu" 2>"${TMP_PATH}/resp"
     [ $? -ne 0 ] && return
@@ -184,7 +187,7 @@ function arcMenu() {
     MODEL="${resp}"
     # Check for DT and SAS Controller
     DT="$(readModelKey "${resp}" "dt")"
-    if [ "${DT}" = "true" ] && [ "${SASCONTROLLER}" -gt "0" ]; then
+    if [ "${DT}" = "true" ] && [ ${SASCONTROLLER} -gt 0 ]; then
       # There is no Raid/SCSI Support for DT Models
       WARNON=2
     fi
@@ -280,14 +283,14 @@ function arcsettings() {
       [ $? -ne 0 ] && return
       resp=$(<"${TMP_PATH}/resp")
       [ -z "${resp}" ] && return
-      if [ "${resp}" = "1" ]; then
+      if [ ${resp} -eq 1 ]; then
         # read valid serial from file
         SN="$(readModelKey "${MODEL}" "arc.serial")"
         writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
         writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.patch" "true" "${USER_CONFIG_FILE}"
         break
-      elif [ "${resp}" = "2" ]; then
+      elif [ ${resp} -eq 2 ]; then
         # Generate random serial
         SN="$(generateSerial "${MODEL}")"
         writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
@@ -320,62 +323,31 @@ function arcnetdisk() {
   # Get Network Config for Loader
   getnet
   # Only load getmap when Sata Controller are dedected and no DT Model is selected
-  if [ "${SATACONTROLLER}" -gt "0" ] && [ "${DT}" != "true" ]; then
+  if [ ${SATACONTROLLER} -gt 0 ] && [ "${DT}" != "true" ]; then
     # Config for Sata Controller with PortMap to get all drives
       dialog --backtitle "$(backtitle)" --title "Arc Disks" \
         --infobox "SATA Controller found. Need PortMap for Controller!" 0 0
     # Get Portmap for Loader
     getmap
   fi
-  # Ask for Extensions
-  ALLEXTENSIONS="$(availableExtensions "${PLATFORM}" "${KVER}")"
-  # read Extensions from user config
-  unset EXTENSIONS
-  declare -A EXTENSIONS
-  while IFS=': ' read -r KEY VALUE; do
-    [ -n "${KEY}" ] && EXTENSIONS["${KEY}"]="${VALUE}"
-  done < <(readConfigMap "extensions" "${USER_CONFIG_FILE}")
-  rm "${TMP_PATH}/opts"
-  touch "${TMP_PATH}/opts"
-  while read -r EXTENSION DESC; do
-    arrayExistItem "${EXTENSION}" "${!EXTENSIONS[@]}" && ACT="on" || ACT="off"         # Check if addon has already been added
-    echo -e "${EXTENSION} \"${DESC}\" ${ACT}" >>"${TMP_PATH}/opts"
-  done <<<${ALLEXTENSIONS}
-  dialog --backtitle "$(backtitle)" --title "DSM Extensions" --aspect 18 \
-    --checklist "Select DSM Extensions to include\nSelect with SPACE" 0 0 0 \
-    --file "${TMP_PATH}/opts" 2>"${TMP_PATH}/resp"
-  [ $? -ne 0 ] && return 1
-  resp=$(<"${TMP_PATH}/resp")
-  [ -z "${resp}" ] && continue
-  dialog --backtitle "$(backtitle)" --title "DSM Extensions" \
-      --infobox "Writing to user config" 0 0
-  unset EXTENSIONS
-  declare -A EXTENSIONS
-  writeConfigKey "extensions" "{}" "${USER_CONFIG_FILE}"
-  for EXTENSION in ${resp}; do
-    USEREXTENSIONS["${EXTENSION}"]=""
-    writeConfigKey "extensions.${EXTENSION}" "" "${USER_CONFIG_FILE}"
-  done
-  EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
-  dialog --backtitle "$(backtitle)" --title "DSM Extensions" \
-    --msgbox "DSM Extensions selected:\n${EXTENSIONSINFO}" 0 0
+  extensionSelection
   dialog --backtitle "$(backtitle)" --title "Arc Config" \
     --infobox "Configuration successful!" 0 0
   sleep 1
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
-  if [ "${WARNON}" = "1" ]; then
+  if [ ${WARNON} -eq 1 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
       --msgbox "WARN: Your Controller has more than 8 Disks connected. Max Disks per Controller: 8" 0 0
   fi
-  if [ "${WARNON}" = "2" ]; then
+  if [ ${WARNON} -eq 2 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
       --msgbox "WARN: You have selected a DT Model. There is no support for Raid/SCSI Controller." 0 0
   fi
-  if [ "${WARNON}" = "3" ]; then
+  if [ ${WARNON} -eq 3 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
       --msgbox "WARN: You have more than 8 Ethernet Ports. There are only 8 supported by Redpill." 0 0
   fi
-  if [ "${WARNON}" = "4" ]; then
+  if [ ${WARNON} -eq 4 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
       --msgbox "WARN: Your CPU does not have AES Support for Hardwareencryption in DSM." 0 0
   fi
@@ -392,10 +364,10 @@ function arcnetdisk() {
     [ $? -ne 0 ] && return
     resp=$(<"${TMP_PATH}/resp")
     [ -z "${resp}" ] && return
-    if [ "${resp}" = "1" ]; then
+    if [ ${resp} -eq 1 ]; then
       make
       break
-    elif [ "${resp}" = "2" ]; then
+    elif [ ${resp} -eq 2 ]; then
       dialog --clear --no-items --backtitle "$(backtitle)"
       break
     fi
@@ -567,10 +539,10 @@ function make() {
     [ $? -ne 0 ] && return
     resp=$(<"${TMP_PATH}/resp")
     [ -z "${resp}" ] && return
-    if [ "${resp}" = "1" ]; then
+    if [ ${resp} -eq 1 ]; then
       boot && exit 0
       break
-    elif [ "${resp}" = "2" ]; then
+    elif [ ${resp} -eq 2 ]; then
       return 0
       break
     fi
@@ -606,6 +578,12 @@ function editUserConfig() {
 ###############################################################################
 # Shows option to manage Addons
 function addonMenu() {
+  addonSelection
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+  BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+}
+
+function addonSelection() {
   # read platform and kernel version to check if addon exists
   MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
@@ -642,20 +620,25 @@ function addonMenu() {
   ADDONSINFO="$(readConfigEntriesArray "addons" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "Addons" \
     --msgbox "Loader Addons selected:\n${ADDONSINFO}" 0 0
-  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
-  BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
 ###############################################################################
 # Shows option to manage Extension
 function extensionMenu() {
+  extensionSelection
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+  BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+}
+
+function extensionSelection() {
   # read platform and kernel version to check if addon exists
   MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
   PLATFORM="$(readModelKey "${MODEL}" "platform")"
   KVER="$(readModelKey "${MODEL}" "productvers.[${PRODUCTVER}].kver")"
+  # Ask for Extensions
   ALLEXTENSIONS="$(availableExtensions "${PLATFORM}" "${KVER}")"
-  # read addons from user config
+  # read Extensions from user config
   unset EXTENSIONS
   declare -A EXTENSIONS
   while IFS=': ' read -r KEY VALUE; do
@@ -685,8 +668,6 @@ function extensionMenu() {
   EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "DSM Extensions" \
     --msgbox "DSM Extensions selected:\n${EXTENSIONSINFO}" 0 0
-  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
-  BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 }
 
 ###############################################################################
@@ -1956,7 +1937,7 @@ function sysinfo() {
   TEXT+="\nTyp | Boot: \Zb${MACHINE} | ${BOOTSYS}\Zn"
   TEXT+="\nVendor: \Zb${VENDOR}\Zn"
   TEXT+="\nCPU | Cores: \Zb${CPUINFO} | ${CPUCORES}\Zn"
-  TEXT+="\nMemory: \Zb$((${RAMTOTAL}/1024))GB\Zn"
+  TEXT+="\nMemory: \Zb$((${RAMTOTAL} / 1024))GB\Zn"
   TEXT+="\nNetwork: \Zb${NETRL_NUM} Adapter\Zn"
   TEXT+="\nIP(s): \Zb${IPLIST}\Zn\n"
   # Print Config Informations
@@ -1990,7 +1971,7 @@ function sysinfo() {
   # Check for Controller // 104=RAID // 106=SATA // 107=SAS
   TEXT+="\n\Z4> Storage\Zn"
   # Get Information for Sata Controller
-  if [ "${SATACONTROLLER}" -gt "0" ]; then
+  if [ ${SATACONTROLLER} -gt 0 ]; then
     NUMPORTS=0
     for PCI in $(lspci -nnk | grep -ie "\[0106\]" | awk '{print$1}'); do
       NAME="$(lspci -s "${PCI}" | sed "s/\ .*://")"
@@ -2009,10 +1990,10 @@ function sysinfo() {
       while read -r PORT; do
         ls -l /sys/block | fgrep -q "${PCI}/ata${PORT}" && ATTACH=1 || ATTACH=0
         PCMD=$(cat /sys/class/scsi_host/${HOSTPORTS[${PORT}]}/ahci_port_cmd)
-        [ "${PCMD}" = "0" ] && DUMMY=1 || DUMMY=0
-        [ "${ATTACH}" = "1" ] && TEXT+="\Z2\Zb"
-        [ "${DUMMY}" = "1" ] && TEXT+="\Z1"
-        [ "${DUMMY}" = "0" ] && [ "${ATTACH}" = "0" ] && TEXT+="\Zb"
+        [ ${PCMD} -eq 0 ] && DUMMY=1 || DUMMY=0
+        [ ${ATTACH} -eq 1 ] && TEXT+="\Z2\Zb"
+        [ ${DUMMY} -eq 1 ] && TEXT+="\Z1"
+        [ ${DUMMY} -eq 0 ] && [ ${ATTACH} -eq 0 ] && TEXT+="\Zb"
         TEXT+="${PORT}\Zn "
         NUMPORTS=$((${NUMPORTS}+1))
       done < <(echo ${!HOSTPORTS[@]} | tr ' ' '\n' | sort -n)
@@ -2021,7 +2002,7 @@ function sysinfo() {
     TEXT+="\n\ZbTotal Ports: \Z2\Zb${NUMPORTS}\Zn\n"
   fi
   # Get Information for SAS Controller
-  if [ "${SASCONTROLLER}" -gt "0" ]; then
+  if [ ${SASCONTROLLER} -gt 0 ]; then
     for PCI in $(lspci -nnk | grep -ie "\[0104\]" -ie "\[0107\]" | awk '{print$1}'); do
       # Get Name of Controller
       NAME="$(lspci -s "${PCI}" | sed "s/\ .*://")"
@@ -2164,12 +2145,12 @@ function saveMenu() {
 function formatdisks() {
   rm -f "${TMP_PATH}/opts"
   while read POSITION NAME; do
-    [ -z "${POSITION}" -o -z "${NAME}" ] && continue
+    [ -z "${POSITION}" ] || [ -z "${NAME}" ] && continue
     echo "${POSITION}" | grep -q "${LOADER_DEVICE_NAME}" && continue
     echo "\"${POSITION}\" \"${NAME}\" \"off\"" >>"${TMP_PATH}/opts"
   done < <(ls -l /dev/disk/by-id/ | sed 's|../..|/dev|g' | grep -E "/dev/sd|/dev/nvme" | awk -F' ' '{print $NF" "$(NF-2)}' | sort -uk 1,1)
   while read POSITION NAME; do
-    [ -z "${POSITION}" -o -z "${NAME}" ] && continue
+    [ -z "${POSITION}" ] || [ -z "${NAME}" ] && continue
     echo "${POSITION}" | grep -q "${LOADER_DEVICE_NAME}" && continue
     echo "\"${POSITION}\" \"${NAME}\" \"off\"" >>"${TMP_PATH}/opts"
   done < <(ls -l /dev/disk/by-path/ | sed 's|../..|/dev|g' | grep -E "/dev/sd|/dev/nvme" | awk -F' ' '{print $NF" "$(NF-2)}' | sort -uk 1,1)
