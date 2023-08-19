@@ -1,4 +1,19 @@
+Merge pull request #485 from AuxXxilium/dev
+Merge pull request #486 from AuxXxilium/dev
 Merge pull request #487 from AuxXxilium/dev
+Merge pull request #488 from AuxXxilium/dev
+Revert "defconfig: update and add pci devices to arc kernel"
+build: 23.8.14
+build: 23.8.14
+build: 23.8.15
+build: add Changelog as File
 build: cleanup
+build: fix changelog output
+build: remove Changelog from env and add file to upload
+build: update
+build: update again
 changelog: remove old file
 changelog: rename to .txt
+init: WOL: fix syntax
+init: fix WOL
+init: remove backslash from ip link
