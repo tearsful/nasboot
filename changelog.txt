@@ -1,18 +1,3 @@
-Merge pull request #491 from AuxXxilium/dev
-arc-reboot: set executable flag
-arc: add clean menu to remove old loader files
-arc: cleanup format dup
-arc: new model selection
-arc: rework and cleanup
-arc: rework sysinfo
-boot: add back scsi boot
-calc_run_size: update and fixes
-defconfig: allow hotplug in loader
-env: update
-gitignore: update
-init/boot: fixes
-init: fix loader disk showing
-init: modify boot to correct reboot to config
-init: multiple rework
-storage: rework
-sysinfo: fix output
+Merge pull request #493 from AuxXxilium/dev
+env: fix getLKM
+init: fix
