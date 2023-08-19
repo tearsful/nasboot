@@ -1,19 +1,18 @@
-Merge pull request #485 from AuxXxilium/dev
-Merge pull request #486 from AuxXxilium/dev
-Merge pull request #487 from AuxXxilium/dev
-Merge pull request #488 from AuxXxilium/dev
-Revert "defconfig: update and add pci devices to arc kernel"
-build: 23.8.14
-build: 23.8.14
-build: 23.8.15
-build: add Changelog as File
-build: cleanup
-build: fix changelog output
-build: remove Changelog from env and add file to upload
-build: update
-build: update again
-changelog: remove old file
-changelog: rename to .txt
-init: WOL: fix syntax
-init: fix WOL
-init: remove backslash from ip link
+Merge pull request #491 from AuxXxilium/dev
+arc-reboot: set executable flag
+arc: add clean menu to remove old loader files
+arc: cleanup format dup
+arc: new model selection
+arc: rework and cleanup
+arc: rework sysinfo
+boot: add back scsi boot
+calc_run_size: update and fixes
+defconfig: allow hotplug in loader
+env: update
+gitignore: update
+init/boot: fixes
+init: fix loader disk showing
+init: modify boot to correct reboot to config
+init: multiple rework
+storage: rework
+sysinfo: fix output
