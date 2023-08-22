@@ -490,24 +490,27 @@ function make() {
       cp -f "${UNTAR_PAT_PATH}/rd.gz"           "${ORI_RDGZ_FILE}"
     fi
   fi
+  # Update PAT Info for Update
+  PAT_MODEL="$(echo "${MODEL}" | sed -e 's/\./%2E/g' -e 's/+/%2B/g')"
+  PAT_MAJOR="$(echo "${PRODUCTVER}" | cut -b 1)"
+  PAT_MINOR="$(echo "${PRODUCTVER}" | cut -b 3)"
+  PAT_URL="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${PAT_MODEL}&major=${PAT_MAJOR}&minor=${PAT_MINOR}" | jq -r '.info.system.detail[0].items[0].files[0].url')"
+  PAT_HASH="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${PAT_MODEL}&major=${PAT_MAJOR}&minor=${PAT_MINOR}" | jq -r '.info.system.detail[0].items[0].files[0].checksum')"
+  PAT_URL="${PAT_URL%%\?*}"
+  writeConfigKey "arc.pathash" "${PAT_HASH}" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
   # Patch zImage
   if ! /opt/arpl/zimage-patch.sh; then
     dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
       --msgbox "zImage not patched:\n$(<"${LOG_FILE}")" 0 0
     return 1
   fi
-  # Update HASH of new DSM zImage
-  ZIMAGE_HASH_CUR="$(sha256sum "${ORI_ZIMAGE_FILE}" | awk '{print$1}')"
-  writeConfigKey "zimage-hash" "${ZIMAGE_HASH_CUR}" "${USER_CONFIG_FILE}"
   # Patch Ramdisk
   if ! /opt/arpl/ramdisk-patch.sh; then
     dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
       --msgbox "Ramdisk not patched:\n$(<"${LOG_FILE}")" 0 0
     return 1
   fi
-  # Update HASH of new DSM Ramdisk
-  RAMDISK_HASH_CUR="$(sha256sum "${ORI_RDGZ_FILE}" | awk '{print$1}')"
-  writeConfigKey "ramdisk-hash" "${RAMDISK_HASH_CUR}" "${USER_CONFIG_FILE}"
   echo "Ready!"
   sleep 3
   # Build is done
