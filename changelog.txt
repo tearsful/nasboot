@@ -1,21 +1,6 @@
-Merge pull request #496 from AuxXxilium/dev
-Merge pull request #497 from AuxXxilium/dev
-Merge pull request #498 from AuxXxilium/dev
-Merge pull request #500 from AuxXxilium/dev
-Merge pull request #502 from AuxXxilium/dev
-Merge pull request #503 from AuxXxilium/dev
-arc: cleanup
-arc: fix typo
-boot: fix cmdline
-configs: link configs
-dhcp: fix
-init/boot: fix syntax
-init: remove flashdisk tag from disktype
-iosched: fix code
-kernel_defconfig: fix
-multi: fix bugs
-multi: fix more and reduce code
-multi: some script fix
-patch: remove empty lines
-ramdisk-patch: fix typo
-ramdisk-patch: go back to old ordering
+Merge pull request #507 from AuxXxilium/dev
+Merge pull request #508 from AuxXxilium/dev
+Revert "ramdisk-patch: go back to old ordering"
+init: fix typo
+storage: set loader disk to slot 25 for esxi
+storage: try to map loader disk out of range in esxi
