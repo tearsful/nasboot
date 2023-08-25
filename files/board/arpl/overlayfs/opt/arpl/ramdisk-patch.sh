@@ -146,7 +146,6 @@ gzip -dc "${LKM_PATH}/rp-${PLATFORM}-${KVER}-${LKM}.ko.gz" >"${RAMDISK_PATH}/usr
 DT="$(readModelKey "${MODEL}" "dt")"
 
 mkdir -p "${RAMDISK_PATH}/addons"
-mkdir -p "${RAMDISK_PATH}/addons"
 echo "#!/bin/sh" >"${RAMDISK_PATH}/addons/addons.sh"
 echo 'echo "addons.sh called with params ${@}"' >>"${RAMDISK_PATH}/addons/addons.sh"
 echo "export PLATFORM=${PLATFORM}" >>"${RAMDISK_PATH}/addons/addons.sh"
@@ -156,26 +155,6 @@ echo "export MCHECKSUM=${PAT_HASH}" >>"${RAMDISK_PATH}/addons/addons.sh"
 echo "export LAYOUT=${LAYOUT}" >>"${RAMDISK_PATH}/addons/addons.sh"
 echo "export KEYMAP=${KEYMAP}" >>"${RAMDISK_PATH}/addons/addons.sh"
 chmod +x "${RAMDISK_PATH}/addons/addons.sh"
-
-# User Addons
-for ADDON in ${!ADDONS[@]}; do
-  PARAMS=${ADDONS[${ADDON}]}
-  if ! installAddon ${ADDON}; then
-    echo -n "${ADDON} is not available for this Platform!" | tee -a "${LOG_FILE}"
-    exit 1
-  fi
-  echo "/addons/${ADDON}.sh \${1} ${PARAMS}" >> "${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
-done
-
-# User Extensions
-for EXTENSION in ${!EXTENSIONS[@]}; do
-  PARAMS=${EXTENSIONS[${EXTENSION}]}
-  if ! installExtension ${EXTENSION}; then
-    echo -n "${EXTENSION} is not available for this Platform!" | tee -a "${LOG_FILE}"
-    exit 1
-  fi
-  echo "/addons/${EXTENSION}.sh \${1} ${PARAMS}" >> "${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
-done
 
 # Required addons: misc, eudev, disks, wol, acpid, bootwait
 installAddon eudev
@@ -188,6 +167,27 @@ installAddon localrss
 echo "/addons/localrss.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon wol
 echo "/addons/wol.sh \${1} " >> "${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
+
+# User Addons
+for ADDON in ${!ADDONS[@]}; do
+  PARAMS=${ADDONS[${ADDON}]}
+  if ! installAddon ${ADDON}; then
+    echo -n "${ADDON} is not available for this Platform!" | tee -a "${LOG_FILE}"
+    exit 1
+  fi
+  echo "/addons/${ADDON}.sh \${1} ${PARAMS}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
+done
+
+# User Extensions
+for EXTENSION in ${!EXTENSIONS[@]}; do
+  PARAMS=${EXTENSIONS[${EXTENSION}]}
+  if ! installExtension ${EXTENSION}; then
+    echo -n "${EXTENSION} is not available for this Platform!" | tee -a "${LOG_FILE}"
+    exit 1
+  fi
+  echo "/addons/${EXTENSION}.sh \${1} ${PARAMS}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
+done
+
 # Enable Telnet
 echo "inetd" >>"${RAMDISK_PATH}/addons/addons.sh"
 
