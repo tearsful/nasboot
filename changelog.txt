@@ -1,6 +1,8 @@
-Merge pull request #507 from AuxXxilium/dev
-Merge pull request #508 from AuxXxilium/dev
-Revert "ramdisk-patch: go back to old ordering"
-init: fix typo
-storage: set loader disk to slot 25 for esxi
-storage: try to map loader disk out of range in esxi
+Merge pull request #512 from AuxXxilium/dev
+arc/storare: show error if more than 26 drives are connected
+ramdisk-patch: cleanup
+ramdisk-patch: cleanup
+ramdisk-patch: go back to old ordering
+storage: cleanup
+storage: fix typo
+storage: rework logic
