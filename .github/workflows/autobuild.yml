@@ -26,8 +26,11 @@ jobs:
           git config --global user.name "AuxXxilium"
           sudo timedatectl set-timezone "Europe/Berlin"
 
+          # Clean up disk space
+          docker rmi $(docker images -q)
+
           sudo apt update
-          sudo apt install -y jq gettext libelf-dev qemu-utils
+          sudo apt install -y jq gawk gettext libelf-dev qemu-utils
           sudo snap install yq
 
       # Check dl cache
@@ -160,9 +163,6 @@ jobs:
         with:
           name: Images
           path: |
-            arc-${{ env.VERSION }}.img.zip
-            arc-${{ env.VERSION }}.vmdk-dyn.zip
-            arc-${{ env.VERSION }}.vmdk-flat.zip
             update.zip
           retention-days: 5
 

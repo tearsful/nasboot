@@ -45,8 +45,11 @@ jobs:
           git config --global user.name "AuxXxilium"
           sudo timedatectl set-timezone "Europe/Berlin"
 
+          # Clean up disk space
+          docker rmi $(docker images -q)
+
           sudo apt update
-          sudo apt install -y jq gettext libelf-dev qemu-utils
+          sudo apt install -y jq gawk gettext libelf-dev qemu-utils
           sudo snap install yq
 
       # Check dl cache
@@ -116,14 +119,6 @@ jobs:
             echo "${VERSION}" >VERSION
             echo "${VERSION}" >files/board/arpl/p1/ARPL-VERSION
             sed 's/^ARPL_VERSION=.*/ARPL_VERSION="'${VERSION}'"/' -i files/board/arpl/overlayfs/opt/arpl/include/consts.sh
-
-            git pull
-            status=$(git status -s | awk '{printf " %s", $2}')
-            if [ -n "${status}" ]; then
-              git add ${status}
-              git commit -m "build: ${VERSION}"
-              git push -f
-            fi
           fi
 
       # Get extractor, LKM, Addons, Modules and Configs
@@ -197,9 +192,6 @@ jobs:
         with:
           name: Images
           path: |
-            arc-${{ env.VERSION }}.img.zip
-            arc-${{ env.VERSION }}.vmdk-dyn.zip
-            arc-${{ env.VERSION }}.vmdk-flat.zip
             update.zip
           retention-days: 5
 
