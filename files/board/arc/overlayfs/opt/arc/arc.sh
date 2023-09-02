@@ -26,7 +26,7 @@ SATACONTROLLER=$(lspci -d ::106 | wc -l)
 writeConfigKey "device.satacontroller" "${SATACONTROLLER}" "${USER_CONFIG_FILE}"
 SASCONTROLLER=$(lspci -d ::107 | wc -l)
 writeConfigKey "device.sascontroller" "${SASCONTROLLER}" "${USER_CONFIG_FILE}"
-if [ ${SASCONTROLLER} -gt 0 ]; then 
+if [ ${SASCONTROLLER} -gt 0 ]; then
   # LSI Controller check
   if [ $(lspci | grep LSI | wc -l) -gt 0 ]; then
     LSIMODE="$(readConfigKey "arc.lsimode" "${USER_CONFIG_FILE}")"
@@ -840,7 +840,7 @@ function cmdlineMenu() {
         ;;
       2)
         if [ ${#CMDLINE[@]} -eq 0 ]; then
-          dialog --backtitle "$(backtitle)" --msgbox "No user cmdline to remove" 0 0 
+          dialog --backtitle "$(backtitle)" --msgbox "No user cmdline to remove" 0 0
           continue
         fi
         ITEMS=""
@@ -996,7 +996,7 @@ function synoinfoMenu() {
         ;;
       2)
         if [ ${#SYNOINFO[@]} -eq 0 ]; then
-          dialog --backtitle "$(backtitle)" --msgbox "No synoinfo entries to remove" 0 0 
+          dialog --backtitle "$(backtitle)" --msgbox "No synoinfo entries to remove" 0 0
           continue
         fi
         ITEMS=""
@@ -1157,7 +1157,7 @@ function backupMenu() {
             dialog --backtitle "$(backtitle)" --colors --aspect 18 \
               --msgbox "This feature is only available when accessed via web/ssh." 0 0
             return
-          fi 
+          fi
           dialog --backtitle "$(backtitle)" --title "Backup Loader Disk" \
               --yesno "Warning:\nDo not terminate midway, otherwise it may cause damage to the Loader. Do you want to continue?" 0 0
           [ $? -ne 0 ] && return
@@ -1190,7 +1190,7 @@ function backupMenu() {
             dialog --backtitle "$(backtitle)" --colors --aspect 18 \
               --msgbox "This feature is only available when accessed via web/ssh." 0 0
             return 1
-          fi 
+          fi
           dialog --backtitle "$(backtitle)" --title "Restore bootloader disk" --aspect 18 \
               --yesno "Please upload the Backup file.\nCurrently, arc-x.zip(github) and arc-backup.img.gz(Backup) files are supported." 0 0
           [ $? -ne 0 ] && continue
@@ -1204,7 +1204,7 @@ function backupMenu() {
             USER_FILE="${F}"
             [ "${F##*.}" = "zip" -a $(unzip -l "${TMP_PATH}/${USER_FILE}" | grep -c "\.img$") -eq 1 ] && IFTOOL="zip"
             [ "${F##*.}" = "gz" -a "${F#*.}" = "img.gz" ] && IFTOOL="gzip"
-            break 
+            break
           done
           popd
           if [ -z "${IFTOOL}" ] || [ -z "${TMP_PATH}/${USER_FILE}" ]; then
@@ -1215,7 +1215,7 @@ function backupMenu() {
                 --yesno "Warning:\nDo not terminate midway, otherwise it may cause damage to the Loader. Do you want to continue?" 0 0
             [ $? -ne 0 ] && (
               rm -f "${LOADER_DISK}"
-              return 1 
+              return 1
             )
             dialog --backtitle "$(backtitle)" --title "Restore Loader disk" --aspect 18 \
               --infobox "Restore in progress..." 0 0
@@ -1365,7 +1365,7 @@ function backupMenu() {
             dialog --backtitle "$(backtitle)" --colors --aspect 18 \
               --msgbox "This feature is only available when accessed via web/ssh." 0 0
             return
-          fi 
+          fi
           dialog --backtitle "$(backtitle)" --title "Restore bootloader disk" --aspect 18 \
               --yesno "Please upload the Backup file.\nCurrently, arc-x.zip(github) and arc-backup.img.gz(Backup) files are supported." 0 0
           [ $? -ne 0 ] && return
@@ -1379,7 +1379,7 @@ function backupMenu() {
             USER_FILE="${F}"
             [ "${F##*.}" = "zip" ] && [ $(unzip -l "${TMP_PATH}/${USER_FILE}" | grep -c "\.img$") -eq 1 ] && IFTOOL="zip"
             [ "${F##*.}" = "gz" ] && [ "${F#*.}" = "img.gz" ] && IFTOOL="gzip"
-            break 
+            break
           done
           popd
           if [ -z "${IFTOOL}" ] || [ -z "${TMP_PATH}/${USER_FILE}" ]; then
@@ -1503,12 +1503,11 @@ function updateMenu() {
   while true; do
     dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
       1 "Full Upgrade Loader" \
-      2 "Update Arc Loader" \
-      3 "Update Loader Addons" \
-      4 "Update DSM Extensions" \
-      5 "Update DSM Modules" \
-      6 "Update DSM Configs" \
-      7 "Update Loader LKMs" \
+      2 "Update Loader Addons" \
+      3 "Update DSM Extensions" \
+      4 "Update DSM Modules" \
+      5 "Update DSM Configs" \
+      6 "Update Loader LKMs" \
       2>"${TMP_PATH}/resp"
     [ $? -ne 0 ] && return 1
     case "$(<"${TMP_PATH}/resp")" in
@@ -1581,81 +1580,6 @@ function updateMenu() {
         exit 0
         ;;
       2)
-        ACTUALVERSION="${ARC_VERSION}"
-        # Ask for Tag
-        dialog --clear --backtitle "$(backtitle)" --title "Update Arc" \
-          --menu "Which Version?" 0 0 0 \
-          1 "Latest" \
-          2 "Select Version" \
-        2>"${TMP_PATH}/opts"
-        opts="$(<"${TMP_PATH}/opts")"
-        [ -z "${opts}" ] && return 1
-        if [ ${opts} -eq 1 ]; then
-          TAG="$(curl --insecure -s https://api.github.com/repos/AuxXxilium/arc/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3)}')"
-          if [ $? -ne 0 ] || [ -z "${TAG}" ]; then
-            dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-              --msgbox "Error checking new version" 0 0
-            return 1
-          fi
-        elif [ ${opts} -eq 2 ]; then
-          dialog --backtitle "$(backtitle)" --title "Update Arc" \
-          --inputbox "Type the Version!" 0 0 \
-          2>"${TMP_PATH}/input"
-          TAG="$(<"${TMP_PATH}/input")"
-          [ -z "${TAG}" ] && continue
-        fi
-        if [ "${ACTUALVERSION}" = "${TAG}" ]; then
-          dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-            --yesno "No new version. Actual version is ${ACTUALVERSION}\nForce update?" 0 0
-          [ $? -ne 0 ] && continue
-        fi
-        dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-          --infobox "Downloading ${TAG}" 0 0
-        # Download update file
-        STATUS=$(curl --insecure -w "%{http_code}" -L "https://github.com/AuxXxilium/arc/releases/download/${TAG}/update.zip" -o "${TMP_PATH}/update.zip")
-        if [ $? -ne 0 ] || [ ${STATUS} -ne 200 ]; then
-          dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-            --msgbox "Error downloading update file" 0 0
-          return 1
-        fi
-        unzip -oq "${TMP_PATH}/update.zip" -d "${TMP_PATH}"
-        rm -f "${TMP_PATH}/update.zip"
-        if [ $? -ne 0 ]; then
-          dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-            --msgbox "Error extracting update file" 0 0
-          return 1
-        fi
-        # Check checksums
-        (cd "${TMP_PATH}" && sha256sum --status -c sha256sum)
-        if [ $? -ne 0 ]; then
-          dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-            --msgbox "Checksum do not match!" 0 0
-          return 1
-        fi
-        dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-          --infobox "Installing new files" 0 0
-        # Process update-list.yml
-        while read -r F; do
-          [ -f "${F}" ] && rm -f "${F}"
-          [ -d "${F}" ] && rm -Rf "${F}"
-        done < <(readConfigArray "remove" "${TMP_PATH}/update-list.yml")
-        while IFS=': ' read -r KEY VALUE; do
-          if [ "${KEY: -1}" = "/" ]; then
-            rm -rf "${VALUE}"
-            mkdir -p "${VALUE}"
-            tar -zxf "${TMP_PATH}/$(basename "${KEY}").tgz" -C "${VALUE}"
-          else
-            mkdir -p "$(dirname "${VALUE}")"
-            mv "${TMP_PATH}/$(basename "${KEY}")" "${VALUE}"
-          fi
-        done < <(readConfigMap "replace" "${TMP_PATH}/update-list.yml")
-        dialog --backtitle "$(backtitle)" --title "Update Arc" --aspect 18 \
-          --yesno "Arc updated with success to ${TAG}!\nReboot?" 0 0
-        [ $? -ne 0 ] && continue
-        arc-reboot.sh config
-        exit 0
-        ;;
-      3)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update Loader Addons" \
           --menu "Which Version?" 0 0 0 \
@@ -1707,7 +1631,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update Loader Addons" --aspect 18 \
           --msgbox "Addons updated with success! ${TAG}" 0 0
         ;;
-      4)
+      3)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update DSM Extensions" \
           --menu "Which Version?" 0 0 0 \
@@ -1758,7 +1682,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update DSM Extensions" --aspect 18 \
           --msgbox "Extensions updated with success! ${TAG}" 0 0
         ;;
-      5)
+      4)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update DSM Modules" \
           --menu "Which Version?" 0 0 0 \
@@ -1811,7 +1735,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update DSM Modules" --aspect 18 \
           --msgbox "Modules updated to ${TAG} with success!" 0 0
         ;;
-      6)
+      5)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update DSM Configs" \
           --menu "Which Version?" 0 0 0 \
@@ -1853,7 +1777,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update DSM Configs" --aspect 18 \
           --msgbox "Configs updated with success! ${TAG}" 0 0
         ;;
-      7)
+      6)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update Loader LKMs" \
           --menu "Which Version?" 0 0 0 \
@@ -2034,7 +1958,7 @@ function sysinfo() {
     PORTS=$(ls -l /sys/class/scsi_host | grep "${PCI}" | awk -F'/' '{print $NF}' | sed 's/host//' | sort -n)
     for P in ${PORTS}; do
       if lsscsi -b | grep -v - | grep -q "\[${P}:"; then
-        DUMMY="$([ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ] && echo 1 || echo 2)" 
+        DUMMY="$([ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ] && echo 1 || echo 2)"
         if [ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ]; then
           TEXT+="\Z1\Zb$(printf "%02d" ${P})\Zn "
         else
@@ -2199,7 +2123,7 @@ function saveMenu() {
       --yesno "Warning:\nDo not terminate midway, otherwise it may cause damage to the arc. Do you want to continue?" 0 0
   [ $? -ne 0 ] && return 1
   dialog --backtitle "$(backtitle)" --title "Save to Disk" \
-      --infobox "Saving ..." 0 0 
+      --infobox "Saving ..." 0 0
   RDXZ_PATH="${TMP_PATH}/rdxz_tmp"
   mkdir -p "${RDXZ_PATH}"
   (cd "${RDXZ_PATH}"; xz -dc <"${CACHE_PATH}/initrd-arc" | cpio -idm) >/dev/null 2>&1 || true
