@@ -109,8 +109,8 @@ CMDLINE["netif_num"]=${NETIF_NUM}
 ETHXNUM=$(ls /sys/class/net/ | grep eth | wc -l) # Amount of NIC
 ETHX=($(ls /sys/class/net/ | grep eth))  # Real NIC List
 if [ ${ETHXNUM} -gt 8 ]; then
-  ETHX=8
-  echo -e "\033[0;31m*** WARNING: More than 8 NIC are not supported.***\033[0m"
+  ETHXNUM=8
+  echo -e "\033[0;31m*** WARNING: More than 8 NIC are not supported! ***\033[0m"
 fi
 # set missing mac to cmdline if needed
 if [ ${NETIF_NUM} -ne ${ETHXNUM} ]; then
@@ -145,26 +145,32 @@ CMDLINE_DIRECT=$(echo ${CMDLINE_DIRECT} | sed 's/>/\\\\>/g')
 echo -e "Cmdline:\n\033[1;37m${CMDLINE_LINE}\033[0m"
 echo
 
+# Grep Config Values
 DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
-DIRECTDSM="$(readConfigKey "arc.directdsm" "${USER_CONFIG_FILE}")"
 NOTSETMAC="$(readConfigKey "arc.notsetmac" "${USER_CONFIG_FILE}")"
+
+# Read Bootcount
+BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
+
 # Make Directboot persistent if DSM is installed
-if [ "${DIRECTBOOT}" = "true" ] && [ "${DIRECTDSM}" = "true" ]; then
+if [ "${DIRECTBOOT}" = "true" ] && [ ${BOOTCOUNT} -gt 0 ]; then
     grub-editenv ${GRUB_PATH}/grubenv set dsm_cmdline="${CMDLINE_DIRECT}"
     grub-editenv ${GRUB_PATH}/grubenv set default="direct"
-    echo -e "\033[1;34mEnable Directboot - DirectDSM\033[0m"
-    echo -e "\033[1;34mDSM installed - Reboot with Directboot\033[0m"
+    BOOTCOUNT=$((${BOOTCOUNT} + 1))
+    writeConfigKey "arc.bootcount" "{BOOTCOUNT}" "${USER_CONFIG_FILE}"
+    echo -e "\033[1;34mDSM installed - Make Directboot persistent\033[0m"
     exec reboot
-elif [ "${DIRECTBOOT}" = "true" ] && [ "${DIRECTDSM}" = "false" ]; then
+elif [ "${DIRECTBOOT}" = "true" ] && [ ${BOOTCOUNT} -eq 0 ]; then
     grub-editenv ${GRUB_PATH}/grubenv set dsm_cmdline="${CMDLINE_DIRECT}"
     grub-editenv ${GRUB_PATH}/grubenv set next_entry="direct"
-    writeConfigKey "arc.directdsm" "true" "${USER_CONFIG_FILE}"
+    BOOTCOUNT=$((${BOOTCOUNT} + 1))
+    writeConfigKey "arc.bootcount" "{BOOTCOUNT}" "${USER_CONFIG_FILE}"
     echo -e "\033[1;34mDSM not installed - Reboot with Directboot\033[0m"
     exec reboot
 elif [ "${DIRECTBOOT}" = "false" ]; then
   BOOTIPWAIT="$(readConfigKey "arc.bootipwait" "${USER_CONFIG_FILE}")"
   [ -z "${BOOTIPWAIT}" ] && BOOTIPWAIT=20
-  echo "Detected ${#ETHX[@]} NIC. DHCP - Waiting for Connection:"
+  echo "Detected ${#ETHX[@]} NIC. Waiting for Connection:"
   for N in $(seq 0 $((${#ETHX[@]} - 1))); do
     DRIVER=$(ls -ld /sys/class/net/${ETHX[${N}]}/device/driver 2>/dev/null | awk -F '/' '{print $NF}')
     COUNT=0
@@ -175,9 +181,17 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
         break
       fi
       IP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
+      STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
+      if [ "${ETHX[${N}]}" = "eth0" ] && [ "${STATICIP}" = "true" ] && [ ${BOOTCOUNT} -gt 0 ]; then
+        IP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+        ip addr add "${IP}" dev "${ETHX[${N}]}"
+        MSG="STATIC"
+      else
+        MSG="DHCP"
+      fi
       if [ -n "${IP}" ]; then
         SPEED=$(ethtool ${ETHX[${N}]} | grep "Speed:" | awk '{print $2}')
-        echo -e "\r${DRIVER} (${SPEED}): Access \033[1;34mhttp://${IP}:5000\033[0m to connect the DSM via web."
+        echo -e "\r${DRIVER} (${SPEED} | ${MSG}): Access \033[1;34mhttp://${IP}:5000\033[0m to connect to DSM via web."
         break
       fi
       COUNT=$((${COUNT} + 1))
@@ -197,11 +211,11 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
   w | awk '{print $1" "$2" "$4" "$5" "$6}' >WB
   MSG=""
   while test ${BOOTWAIT} -ge 0; do
-    MSG="$(printf "%2ds (accessing Arc will interrupt boot)" "${BOOTWAIT}")"
+    MSG="$(printf "%2ds (Accessing Arc will interrupt Boot)" "${BOOTWAIT}")"
     echo -en "\r${MSG}"
     w | awk '{print $1" "$2" "$4" "$5" "$6}' >WC
     if ! diff WB WC >/dev/null 2>&1; then
-      echo -en "\rA new access is connected, the boot process is interrupted.\n"
+      echo -en "\rA new access is connected, Boot is interrupted.\n"
       rm -f WB WC
       exit 0
     fi
@@ -209,16 +223,20 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
     BOOTWAIT=$((BOOTWAIT - 1))
   done
   rm -f WB WC
-  echo -en "\r$(printf "%${#MSG}s" " ")\n"
+  echo -en "\r$(printf "%$((${#MSG} * 3))s" " ")\n"
 fi
 echo -e "\033[1;37mLoading DSM kernel...\033[0m"
+
+# Write new Bootcount
+BOOTCOUNT=$((${BOOTCOUNT} + 1))
+writeConfigKey "arc.bootcount" "{BOOTCOUNT}" "${USER_CONFIG_FILE}"
 
 # Executes DSM kernel via KEXEC
 kexec -l "${MOD_ZIMAGE_FILE}" --initrd "${MOD_RDGZ_FILE}" --command-line="${CMDLINE_LINE}" >"${LOG_FILE}" 2>&1 || dieLog
 echo -e "\033[1;37m"Booting DSM..."\033[0m"
 for T in $(w | grep -v "TTY" | awk -F' ' '{print $2}')
 do
-  echo -e "\n\033[1;37mThis interface will not be operational. Please use \033[1;34mhttp://find.synology.com/ \033[1;37mto find DSM and connect.\033[0m\n" >"/dev/${T}" 2>/dev/null || true
+  echo -e "\n\033[1;37mThis interface will not be operational. Please use \033[1;34mhttps://finds.synology.com/ \033[1;37mto find DSM and connect.\033[0m\n" >"/dev/${T}" 2>/dev/null || true
 done
 KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
 [ "${KERNELLOAD}" = "kexec" ] && kexec -f -e || poweroff

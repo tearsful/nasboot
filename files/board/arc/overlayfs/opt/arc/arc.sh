@@ -61,7 +61,7 @@ fi
 
 # Get Arc Data from Config
 DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
-DIRECTDSM="$(readConfigKey "arc.directdsm" "${USER_CONFIG_FILE}")"
+BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
 CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
 BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
 ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
@@ -71,11 +71,7 @@ REMAP="$(readConfigKey "arc.remap" "${USER_CONFIG_FILE}")"
 NOTSETMAC="$(readConfigKey "arc.notsetmac" "${USER_CONFIG_FILE}")"
 NOTSETWOL="$(readConfigKey "arc.notsetwol" "${USER_CONFIG_FILE}")"
 KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
-
-# Reset DirectDSM if User boot to Config
-if [ "${DIRECTBOOT}" = "true" ] && [ "${DIRECTDSM}" = "true" ]; then
-  writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
-fi
+STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
 
 ###############################################################################
 # Mounts backtitle dynamically
@@ -218,6 +214,7 @@ function arcMenu() {
     if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
       # Delete old files
       rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
+      rm -f "${CACHE_PATH}/bootcount"
     fi
   fi
   arcbuild
@@ -248,6 +245,7 @@ function arcbuild() {
       if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
         # Delete old files
         rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
+        rm -f "${CACHE_PATH}/bootcount"
       fi
     fi
   fi
@@ -405,18 +403,19 @@ function make() {
     # Check zImage Hash
     ZIMAGE_HASH_CUR="$(sha256sum "${ORI_ZIMAGE_FILE}" | awk '{print$1}')"
     ZIMAGE_HASH="$(readConfigKey "zimage-hash" "${USER_CONFIG_FILE}")"
-    if [ "${ZIMAGE_HASH}" = "${ZIMAGE_HASH_CUR}" ]; then
-      NEWIMAGE="false"
-    fi
     # Check Ramdisk Hash
     RAMDISK_HASH_CUR="$(sha256sum "${ORI_RDGZ_FILE}" | awk '{print$1}')"
     RAMDISK_HASH="$(readConfigKey "ramdisk-hash" "${USER_CONFIG_FILE}")"
-    if [ "${RAMDISK_HASH}" = "${RAMDISK_HASH_CUR}" ]; then
+    if [ "${ZIMAGE_HASH}" = "${ZIMAGE_HASH_CUR}" ] && [ "${RAMDISK_HASH}" = "${RAMDISK_HASH_CUR}" ]; then
       NEWIMAGE="false"
+    else
+      NEWIMAGE="true"
     fi
+  else
+    NEWIMAGE="true"
   fi
   # Build if NEWIMAGE is not falses
-  if [ "${NEWIMAGE}" != "false" ]; then
+  if [ "${NEWIMAGE}" = "true" ]; then
     # Clean old files
     rm -rf "${UNTAR_PAT_PATH}"
     rm -rf "${CACHE_PATH}/${MODEL}/${PRODUCTVER}"
@@ -492,14 +491,18 @@ function make() {
       mkdir -p "${UNTAR_PAT_PATH}"
       tar -xf "${DSM_FILE}" -C "${UNTAR_PAT_PATH}" >"${LOG_FILE}" 2>&1
     fi
-    # Copy DSM Files to locations
-    cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${BOOTLOADER_PATH}"
-    cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${BOOTLOADER_PATH}"
-    cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${SLPART_PATH}"
-    cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${SLPART_PATH}"
+    # Copy DSM Files to Locations if DSM Files not found
     if [ ! -f "${ORI_ZIMAGE_FILE}" ] || [ ! -f "${ORI_RDGZ_FILE}" ]; then
+      #cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${BOOTLOADER_PATH}"
+      #cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${BOOTLOADER_PATH}"
+      cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${SLPART_PATH}"
+      cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${SLPART_PATH}"
       cp -f "${UNTAR_PAT_PATH}/zImage"          "${ORI_ZIMAGE_FILE}"
       cp -f "${UNTAR_PAT_PATH}/rd.gz"           "${ORI_RDGZ_FILE}"
+      # Reset Bootcount if User rebuild DSM
+      if [ ${BOOTCOUNT} -gt 0 ]; then
+        writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
+      fi
     fi
   fi
   # Update PAT Info for Update
@@ -523,10 +526,9 @@ function make() {
       --msgbox "Ramdisk not patched:\n$(<"${LOG_FILE}")" 0 0
     return 1
   fi
-  echo "Ready!"
+  echo "DSM Files patched - Ready!"
   sleep 3
   # Build is done
-  writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.builddone" "true" "${USER_CONFIG_FILE}"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   # Ask for Boot
@@ -1506,10 +1508,11 @@ function updateMenu() {
     dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
       1 "Full Upgrade Loader" \
       2 "Update Loader Addons" \
-      3 "Update DSM Extensions" \
-      4 "Update DSM Modules" \
-      5 "Update DSM Configs" \
-      6 "Update Loader LKMs" \
+      3 "Update Loader Patches" \
+      4 "Update DSM Extensions" \
+      5 "Update DSM Modules" \
+      6 "Update DSM Configs" \
+      7 "Update Loader LKMs" \
       2>"${TMP_PATH}/resp"
     [ $? -ne 0 ] && return 1
     case "$(<"${TMP_PATH}/resp")" in
@@ -1635,6 +1638,48 @@ function updateMenu() {
         ;;
       3)
         # Ask for Tag
+        dialog --clear --backtitle "$(backtitle)" --title "Update Loader Patches" \
+          --menu "Which Version?" 0 0 0 \
+          1 "Latest" \
+          2 "Select Version" \
+        2>"${TMP_PATH}/opts"
+        opts="$(<"${TMP_PATH}/opts")"
+        [ -z "${opts}" ] && return 1
+        if [ ${opts} -eq 1 ]; then
+          TAG="$(curl --insecure -s https://api.github.com/repos/AuxXxilium/arc-patches/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3)}')"
+          if [ $? -ne 0 ] || [ -z "${TAG}" ]; then
+            dialog --backtitle "$(backtitle)" --title "Update Loader Patches" --aspect 18 \
+              --msgbox "Error checking new version" 0 0
+            return 1
+          fi
+        elif [ ${opts} -eq 2 ]; then
+          dialog --backtitle "$(backtitle)" --title "Update Loader Patches" \
+          --inputbox "Type the Version!" 0 0 \
+          2>"${TMP_PATH}/input"
+          TAG="$(<"${TMP_PATH}/input")"
+          [ -z "${TAG}" ] && continue
+        fi
+        dialog --backtitle "$(backtitle)" --title "Update Loader Patches" --aspect 18 \
+          --infobox "Downloading ${TAG}" 0 0
+        STATUS=$(curl --insecure -s -w "%{http_code}" -L "https://github.com/AuxXxilium/arc-patches/releases/download/${TAG}/patches.zip" -o "${TMP_PATH}/patches.zip")
+        if [ $? -ne 0 ] || [] ${STATUS} -ne 200 ]; then
+          dialog --backtitle "$(backtitle)" --title "Update Loader Patches" --aspect 18 \
+            --msgbox "Error downloading" 0 0
+          return 1
+        fi
+        dialog --backtitle "$(backtitle)" --title "Update Loader Patches" --aspect 18 \
+          --infobox "Extracting" 0 0
+        rm -rf "${PATCH_PATH}"
+        mkdir -p "${PATCH_PATH}"
+        unzip -oq "${TMP_PATH}/patches.zip" -d "${PATCH_PATH}" >/dev/null 2>&1
+        rm -f "${TMP_PATH}/patches.zip"
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+        BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+        dialog --backtitle "$(backtitle)" --title "Update Loader Patches" --aspect 18 \
+          --msgbox "Patches updated with success! ${TAG}" 0 0
+        ;;
+      4)
+        # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update DSM Extensions" \
           --menu "Which Version?" 0 0 0 \
           1 "Latest" \
@@ -1684,7 +1729,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update DSM Extensions" --aspect 18 \
           --msgbox "Extensions updated with success! ${TAG}" 0 0
         ;;
-      4)
+      5)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update DSM Modules" \
           --menu "Which Version?" 0 0 0 \
@@ -1737,7 +1782,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update DSM Modules" --aspect 18 \
           --msgbox "Modules updated to ${TAG} with success!" 0 0
         ;;
-      5)
+      6)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update DSM Configs" \
           --menu "Which Version?" 0 0 0 \
@@ -1779,7 +1824,7 @@ function updateMenu() {
         dialog --backtitle "$(backtitle)" --title "Update DSM Configs" --aspect 18 \
           --msgbox "Configs updated with success! ${TAG}" 0 0
         ;;
-      6)
+      7)
         # Ask for Tag
         dialog --clear --backtitle "$(backtitle)" --title "Update Loader LKMs" \
           --menu "Which Version?" 0 0 0 \
@@ -1850,55 +1895,46 @@ function networkMenu() {
 function sysinfo() {
   # Checks for Systeminfo Menu
   CPUINFO="$(awk -F':' '/^model name/ {print $2}' /proc/cpuinfo | uniq | sed -e 's/^[ \t]*//')"
-  CPUCORES="$(awk -F: '/model name/ {core++} END {print core}' /proc/cpuinfo)"
   # Check if machine has EFI
   [ -d /sys/firmware/efi ] && BOOTSYS="EFI" || BOOTSYS="Legacy"
   VENDOR="$(dmidecode -s system-product-name)"
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
+  BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   if [ "${CONFDONE}" = "true" ]; then
     MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
     PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
     PLATFORM="$(readModelKey "${MODEL}" "platform")"
+    DT="$(readModelKey "${MODEL}" "dt")"
     KVER="$(readModelKey "${MODEL}" "productvers.[${PRODUCTVER}].kver")"
-    REMAP="$(readConfigKey "arc.remap" "${USER_CONFIG_FILE}")"
     ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
-    DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
-    DIRECTDSM="$(readConfigKey "arc.directdsm" "${USER_CONFIG_FILE}")"
-    USBMOUNT="$(readConfigKey "arc.usbmount" "${USER_CONFIG_FILE}")"
-    LKM="$(readConfigKey "lkm" "${USER_CONFIG_FILE}")"
-    BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
-    KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
-    MODULESINFO=""
-    KOLIST=""
-    for I in $(lsmod | awk -F' ' '{print $1}' | grep -v 'Module'); do
-      KOLIST+="$(getdepends ${PLATFORM} ${KVER} ${I}) ${I} "
-    done
-    KOLIST=($(echo ${KOLIST} | tr ' ' '\n' | sort -u))
-    for ID in ${KOLIST[@]}; do
-      MODULESINFO+="${ID} "
-    done
-  fi
-  IPLIST="$(ip route 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')"
-  if [ "${REMAP}" = "acports" ] || [ "${REMAP}" = "maxports" ]; then
-    PORTMAP="$(readConfigKey "cmdline.SataPortMap" "${USER_CONFIG_FILE}")"
-    DISKMAP="$(readConfigKey "cmdline.DiskIdxMap" "${USER_CONFIG_FILE}")"
-  elif [ "${REMAP}" = "remap" ]; then
-    PORTMAP="$(readConfigKey "cmdline.sata_remap" "${USER_CONFIG_FILE}")"
-  fi
-  if [ "${CONFDONE}" = "true" ]; then
     ADDONSINFO="$(readConfigEntriesArray "addons" "${USER_CONFIG_FILE}")"
     EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
+    REMAP="$(readConfigKey "arc.remap" "${USER_CONFIG_FILE}")"
+    if [ "${REMAP}" = "acports" ] || [ "${REMAP}" = "maxports" ]; then
+      PORTMAP="$(readConfigKey "cmdline.SataPortMap" "${USER_CONFIG_FILE}")"
+      DISKMAP="$(readConfigKey "cmdline.DiskIdxMap" "${USER_CONFIG_FILE}")"
+    elif [ "${REMAP}" = "remap" ]; then
+      PORTMAP="$(readConfigKey "cmdline.sata_remap" "${USER_CONFIG_FILE}")"
+    fi
   fi
+  DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
+  BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
+  STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
+  USBMOUNT="$(readConfigKey "arc.usbmount" "${USER_CONFIG_FILE}")"
+  LKM="$(readConfigKey "lkm" "${USER_CONFIG_FILE}")"
+  KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
+  MODULESINFO="$(lsmod | awk -F' ' '{print $1}' | grep -v 'Module')"
   MODULESVERSION="$(cat "${MODULES_PATH}/VERSION")"
   ADDONSVERSION="$(cat "${ADDONS_PATH}/VERSION")"
   EXTENSIONSVERSION="$(cat "${EXTENSIONS_PATH}/VERSION")"
   LKMVERSION="$(cat "${LKM_PATH}/VERSION")"
   CONFIGSVERSION="$(cat "${MODEL_CONFIG_PATH}/VERSION")"
+  PATCHESVERSION="$(cat "${PATCH_PATH}/VERSION")"
   TEXT=""
   # Print System Informations
   TEXT+="\n\Z4> System: ${MACHINE}\Zn"
   TEXT+="\n  Vendor | Boot: \Zb${VENDOR} | ${BOOTSYS}\Zn"
-  TEXT+="\n  CPU | Threads: \Zb${CPUINFO} | ${CPUCORES}\Zn"
+  TEXT+="\n  CPU: \Zb${CPUINFO}\Zn"
   TEXT+="\n  Memory: \Zb$((${RAMTOTAL} / 1024))GB\Zn"
   TEXT+="\n"
   TEXT+="\n\Z4> Network: ${ETHXNUM} Adapter\Zn"
@@ -1911,25 +1947,39 @@ function sysinfo() {
         break
       fi
       IP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
+      if [ "${ETHX[${N}]}" = "eth0" ] && [ "${STATICIP}" = "true" ] && [ ${BOOTCOUNT} -gt 0 ]; then
+        IP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+        MSG="STATIC"
+      else
+        MSG="DHCP"
+      fi
       if [ -n "${IP}" ]; then
         SPEED=$(ethtool ${ETHX[${N}]} | grep "Speed:" | awk '{print $2}')
-        TEXT+="\n  ${DRIVER} (${SPEED}): \ZbIP: ${IP} | Mac: ${MAC}\Zn"
+        TEXT+="\n  ${DRIVER} (${SPEED} | ${MSG}): \ZbIP: ${IP} | Mac: ${MAC}\Zn"
         break
       fi
+      COUNT=$((${COUNT} + 1))
+      if [ ${COUNT} -eq 3 ]; then
+        TEXT+="\n  ${DRIVER}: \ZbIP: TIMEOUT| MAC: ${MAC}\Zn"
+        break
+      fi
+      sleep 1
     done
   done
   # Print Config Informations
   TEXT+="\n"
   TEXT+="\n\Z4> Arc: ${ARC_VERSION}\Zn"
-  TEXT+="\n  Subversion Loader: \ZbAddons ${ADDONSVERSION} | LKM ${LKMVERSION}\Zn"
+  TEXT+="\n  Subversion Loader: \ZbAddons ${ADDONSVERSION} | LKM ${LKMVERSION} | Patches ${PATCHESVERSION}\Zn"
   TEXT+="\n  Subversion DSM: \ZbModules ${MODULESVERSION} | Extensions ${EXTENSIONSVERSION} | Configs ${CONFIGSVERSION}\Zn"
   TEXT+="\n"
   TEXT+="\n\Z4>> DSM ${PRODUCTVER}: ${MODEL}\Zn"
-  TEXT+="\n   Kernel | Platform | LKM: \Zb${KVER} | ${PLATFORM} | ${LKM}\Zn"
+  TEXT+="\n   Kernel | LKM: \Zb${KVER} | ${LKM}\Zn"
+  TEXT+="\n   Platform | DeviceTree: \Zb${PLATFORM} | ${DT}\Zn"
   TEXT+="\n\Z4>> Loader\Zn"
   TEXT+="\n   Arcpatch | Kernelload: \Zb${ARCPATCH} | ${KERNELLOAD}\Zn"
-  TEXT+="\n   Directboot | DirectDSM: \Zb${DIRECTBOOT} | ${DIRECTDSM}\Zn"
+  TEXT+="\n   Directboot: \Zb${DIRECTBOOT}\Zn"
   TEXT+="\n   Config | Build: \Zb${CONFDONE} | ${BUILDDONE}\Zn"
+  TEXT+="\n   Bootcount: \Zb${BOOTCOUNT}\Zn"
   TEXT+="\n\Z4>> Extensions\Zn"
   TEXT+="\n   Loader Addons selected: \Zb${ADDONSINFO}\Zn"
   TEXT+="\n   DSM Extensions selected: \Zb${EXTENSIONSINFO}\Zn"
@@ -1956,26 +2006,26 @@ function sysinfo() {
   # Get Information for Sata Controller
   NUMPORTS=0
   if [ $(lspci -d ::106 | wc -l) -gt 0 ]; then
-  TEXT+="\n  SATA:\n"
-  for PCI in $(lspci -d ::106 | awk '{print $1}'); do
-    NAME=$(lspci -s "${PCI}" | sed "s/\ .*://")
-    TEXT+="\Zb  ${NAME}\Zn\n  Ports: "
-    PORTS=$(ls -l /sys/class/scsi_host | grep "${PCI}" | awk -F'/' '{print $NF}' | sed 's/host//' | sort -n)
-    for P in ${PORTS}; do
-      if lsscsi -b | grep -v - | grep -q "\[${P}:"; then
-        DUMMY="$([ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ] && echo 1 || echo 2)"
-        if [ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ]; then
-          TEXT+="\Z1\Zb$(printf "%02d" ${P})\Zn "
+    TEXT+="\n  SATA:\n"
+    for PCI in $(lspci -d ::106 | awk '{print $1}'); do
+      NAME=$(lspci -s "${PCI}" | sed "s/\ .*://")
+      TEXT+="\Zb  ${NAME}\Zn\n  Ports: "
+      PORTS=$(ls -l /sys/class/scsi_host | grep "${PCI}" | awk -F'/' '{print $NF}' | sed 's/host//' | sort -n)
+      for P in ${PORTS}; do
+        if lsscsi -b | grep -v - | grep -q "\[${P}:"; then
+          DUMMY="$([ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ] && echo 1 || echo 2)"
+          if [ "$(cat /sys/class/scsi_host/host${P}/ahci_port_cmd)" = "0" ]; then
+            TEXT+="\Z1\Zb$(printf "%02d" ${P})\Zn "
+          else
+            TEXT+="\Z2\Zb$(printf "%02d" ${P})\Zn "
+            NUMPORTS=$((${NUMPORTS} + 1))
+          fi
         else
-          TEXT+="\Z2\Zb$(printf "%02d" ${P})\Zn "
-          NUMPORTS=$((${NUMPORTS} + 1))
+          TEXT+="\Zb$(printf "%02d" ${P})\Zn "
         fi
-      else
-        TEXT+="\Zb$(printf "%02d" ${P})\Zn "
-      fi
+      done
+      TEXT+="\n"
     done
-    TEXT+="\n"
-  done
   fi
   if [ $(lspci -d ::107 | wc -l) -gt 0 ]; then
     TEXT+="\n  SAS/SCSI:\n"
@@ -2012,6 +2062,70 @@ function sysinfo() {
   TEXT+="\n  Drives total: \Zb${NUMPORTS}\Zn"
   dialog --backtitle "$(backtitle)" --colors --title "Sysinfo" \
     --msgbox "${TEXT}" 0 0
+}
+
+###############################################################################
+# allow setting Static IP for DSM
+function staticIPMenu() {
+  mkdir -p "${TMP_PATH}/sdX1"
+  for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+    mount "${I}" "${TMP_PATH}/sdX1"
+    [ -f "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0" ] && . "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0"
+    umount "${I}"
+    break
+  done
+  rm -rf "${TMP_PATH}/sdX1"
+  TEXT=""
+  TEXT+="This feature will allow you to set a static IP for eth0.\n"
+  TEXT+="Actual Settings are:\n"
+  TEXT+="Mode: ${BOOTPROTO}\n"
+  if [ "${BOOTPROTO}" = "static" ]; then
+    TEXT+="IP: ${IPADDR}\n"
+    TEXT+="NETMASK: ${NETMASK}\n"
+  fi
+  TEXT+="Do you want to change Config?"
+  dialog --backtitle "$(backtitle)" --title "Static IP" \
+      --yesno "${TEXT}" 0 0
+  [ $? -ne 0 ] && return 1
+  dialog --clear --backtitle "$(backtitle)" --title "Static IP" \
+    --menu "DHCP or STATIC?" 0 0 0 \
+      1 "DHCP" \
+      2 "STATIC" \
+    2>"${TMP_PATH}/opts"
+    opts="$(<"${TMP_PATH}/opts")"
+    [ -z "${opts}" ] && return 1
+    if [ ${opts} -eq 1 ]; then
+      echo -e "DEVICE=eth0\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${TMP_PATH}/ifcfg-eth0"
+      writeConfigKey "arc.staticip" "false" "${USER_CONFIG_FILE}"
+    elif [ ${opts} -eq 2 ]; then
+      dialog --backtitle "$(backtitle)" --title "Static IP" \
+        --inputbox "Type a Static IP" 0 0 "${IPADDR}" \
+        2>"${TMP_PATH}/resp"
+      [ $? -ne 0 ] && return 1
+      IPADDR="$(<"${TMP_PATH}/resp")"
+      dialog --backtitle "$(backtitle)" --title "Static IP" \
+        --inputbox "Type a Netmask" 0 0 "${NETMASK}" \
+        2>"${TMP_PATH}/resp"
+      [ $? -ne 0 ] && return 1
+      NETMASK="$(<"${TMP_PATH}/resp")"
+      echo -e "DEVICE=eth0\nBOOTPROTO=static\nONBOOT=yes\nIPV6INIT=off\nIPADDR=${IPADDR}\nNETMASK=${NETMASK}" >"${TMP_PATH}/ifcfg-eth0"
+      writeConfigKey "arc.staticip" "true" "${USER_CONFIG_FILE}"
+    fi
+    dialog --backtitle "$(backtitle)" --title "Static IP" \
+      --yesno "Do you want to set this Config?" 0 0
+    [ $? -ne 0 ] && return 1
+    (
+      mkdir -p "${TMP_PATH}/sdX1"
+      for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+        mount "${I}" "${TMP_PATH}/sdX1"
+        [ -f "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0" ] && cp -f "${TMP_PATH}/ifcfg-eth0" "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0"
+        sync
+        umount "${I}"
+      done
+      rm -rf "${TMP_PATH}/sdX1"
+    )
+    dialog --backtitle "$(backtitle)" --title "Static IP" --colors --aspect 18 \
+      --msgbox "IP Settings done!" 0 0
 }
 
 ###############################################################################
@@ -2270,8 +2384,8 @@ while true; do
         echo "- \"Boot Waittime: \Z4${BOOTWAIT}\Zn \" "                                     >>"${TMP_PATH}/menu"
       fi
       echo "q \"Directboot: \Z4${DIRECTBOOT}\Zn \" "                                        >>"${TMP_PATH}/menu"
-      if [ "${DIRECTBOOT}" = "true" ] && [ "${DIRECTDSM}" = "true" ]; then
-        echo "r \"Reset DirectDSM: \Z4${DIRECTDSM}\Zn \" "                                  >>"${TMP_PATH}/menu"
+      if [ ${BOOTCOUNT} -gt 0 ]; then
+        echo "r \"Reset Bootcount: \Z4${BOOTCOUNT}\Zn \" "                                  >>"${TMP_PATH}/menu"
       fi
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
@@ -2284,6 +2398,7 @@ while true; do
       echo "= \"\Z4========== DSM ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "s \"Allow DSM Downgrade \" "                                                    >>"${TMP_PATH}/menu"
       echo "t \"Reset DSM Password \" "                                                     >>"${TMP_PATH}/menu"
+      echo ". \"Static IP Settings \" "                                                     >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
     if [ "${DEVOPTS}" = "true" ]; then
@@ -2366,12 +2481,12 @@ while true; do
     -) bootwaittime; NEXT="-" ;;
     q) [ "${DIRECTBOOT}" = "false" ] && DIRECTBOOT='true' || DIRECTBOOT='false'
       writeConfigKey "arc.directboot" "${DIRECTBOOT}" "${USER_CONFIG_FILE}"
-      writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
       NEXT="q"
       ;;
     r)
-      writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
-      DIRECTDSM="$(readConfigKey "arc.directdsm" "${USER_CONFIG_FILE}")"
+      writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
+      BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
       NEXT="r"
       ;;
     # DSM Section
@@ -2381,6 +2496,7 @@ while true; do
       ;;
     s) downgradeMenu; NEXT="s" ;;
     t) resetPassword; NEXT="t" ;;
+    .) staticIPMenu; NEXT="." ;;
     # Dev Section
     9) [ "${DEVOPTS}" = "true" ] && DEVOPTS='false' || DEVOPTS='true'
       DEVOPTS="${DEVOPTS}"

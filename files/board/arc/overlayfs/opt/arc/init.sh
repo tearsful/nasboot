@@ -56,11 +56,6 @@ if ! grep -q "arc.sh" ~/.bash_history; then
   echo "arc.sh " >>~/.bash_history
 fi
 
-if [ -d "${CACHE_PATH}/patch" ]; then
-  rm -rf "${PATCH_PATH}"
-  ln -s "${CACHE_PATH}/patch" "${PATCH_PATH}"
-fi
-
 # If user config file not exists, initialize it
 if [ ! -f "${USER_CONFIG_FILE}" ]; then
   touch "${USER_CONFIG_FILE}"
@@ -86,7 +81,6 @@ if [ ! -f "${USER_CONFIG_FILE}" ]; then
   writeConfigKey "arc.confdone" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.directboot" "false" "${USER_CONFIG_FILE}"
-  writeConfigKey "arc.directdsm" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.usbmount" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
@@ -97,12 +91,17 @@ if [ ! -f "${USER_CONFIG_FILE}" ]; then
   writeConfigKey "arc.notsetmac" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.notsetwol" "false" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.kernelload" "power" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.staticip" "false" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
   writeConfigKey "device" "{}" "${USER_CONFIG_FILE}"
 fi
 
+# Grep Config Values
 NOTSETMAC="$(readConfigKey "arc.notsetmac" "${USER_CONFIG_FILE}")"
 NOTSETWOL="$(readConfigKey "arc.notsetwol" "${USER_CONFIG_FILE}")"
 BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+
+# Init Network
 ETHX=($(ls /sys/class/net/ | grep eth))  # real network cards list
 # No network devices
 [ ${#ETHX[@]} -le 0 ] && die "No NIC found! - Loader does not work without Network connection."
@@ -187,16 +186,39 @@ else
 fi
 echo
 
+# Read Bootcount
+BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
+if [ ${BOOTCOUNT} -gt 0 ]; then
+  # Get IP Config
+  if [ $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1 | wc -l) -gt 0 ]; then
+    mkdir -p "${TMP_PATH}/sdX1"
+    for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+      mount "${I}" "${TMP_PATH}/sdX1"
+      [ -f "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0" ] && . "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0"
+      umount "${I}"
+      break
+    done
+    rm -rf "${TMP_PATH}/sdX1"
+    if [ "${BOOTPROTO}" = "static" ]; then
+      writeConfigKey "arc.staticip" "true" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.ip" "${IPADDR}" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.netmask" "${NETMASK}" "${USER_CONFIG_FILE}"
+      echo -e "\033[1;34mDSM installed -> Enable Static IP\033[0m"
+    else
+      writeConfigKey "arc.staticip" "false" "${USER_CONFIG_FILE}"
+      echo -e "\033[1;34mDSM installed -> Enable DHCP\033[0m"
+    fi
+  else
+    echo -e "\033[1;34mDSM not installed or in Recovery Mode -> Enable DHCP\033[0m"
+  fi
+fi
+
 # Wait for an IP
 BOOTIPWAIT="$(readConfigKey "arc.bootipwait" "${USER_CONFIG_FILE}")"
 [ -z "${BOOTIPWAIT}" ] && BOOTIPWAIT=20
 echo "Detected ${#ETHX[@]} NIC. Waiting for Connection:"
 for N in $(seq 0 $((${#ETHX[@]} - 1))); do
   DRIVER=$(ls -ld /sys/class/net/${ETHX[${N}]}/device/driver 2>/dev/null | awk -F '/' '{print $NF}')
-  if [ "${N}" -eq "8" ]; then
-    echo -e "\r${ETHX[${N}]}(${DRIVER}): More than 8 NIC are not supported."
-    break
-  fi
   COUNT=0
   sleep 3
   while true; do
@@ -205,9 +227,17 @@ for N in $(seq 0 $((${#ETHX[@]} - 1))); do
       break
     fi
     IP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
+    STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
+    if [ "${ETHX[${N}]}" = "eth0" ] && [ "${STATICIP}" = "true" ] && [ ${BOOTCOUNT} -gt 0 ]; then
+      IP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+      ip addr add "${IP}" dev "${ETHX[${N}]}"
+      MSG="STATIC"
+    else
+      MSG="DHCP"
+    fi
     if [ -n "${IP}" ]; then
       SPEED=$(ethtool ${ETHX[${N}]} | grep "Speed:" | awk '{print $2}')
-      echo -e "\r${DRIVER} (${SPEED}): Access \033[1;34mhttp://${IP}:7681\033[0m to connect Arc via web."
+      echo -e "\r${DRIVER} (${SPEED} | ${MSG}): Access \033[1;34mhttp://${IP}:7681\033[0m to connect to Arc via web."
       break
     fi
     COUNT=$((${COUNT} + 1))
@@ -234,8 +264,11 @@ if [ ${RAM} -le 3500 ]; then
 fi
 
 mkdir -p "${ADDONS_PATH}"
-mkdir -p "${LKM_PATH}"
+mkdir -p "${EXTENSIONS_PATH}"
 mkdir -p "${MODULES_PATH}"
+mkdir -p "${MODEL_CONFIG_PATH}"
+mkdir -p "${PATCH_PATH}"
+mkdir -p "${LKM_PATH}"
 
 # Load arc
 install-addons.sh
