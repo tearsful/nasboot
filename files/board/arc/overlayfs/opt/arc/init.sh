@@ -192,11 +192,13 @@ BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
 [ -z "${BOOTCOUNT}" ] && BOOTCOUNT=0
 if [ ${BOOTCOUNT} -gt 0 ]; then
   # Get IP Config
+  sleep 1
   if [ $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1 | wc -l) -gt 0 ]; then
     mkdir -p "${TMP_PATH}/sdX1"
     for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
       mount "${I}" "${TMP_PATH}/sdX1"
       [ -f "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0" ] && . "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0"
+      sleep 1
       umount "${I}"
       break
     done
@@ -262,7 +264,7 @@ echo
 # Check memory
 RAM=$(free -m | grep -i mem | awk '{print$2}')
 if [ ${RAM} -le 3500 ]; then
-  echo -e "\033[1;341You have less than 4GB of RAM, if errors occur in loader creation, please increase the amount of RAM.\033[0m\n"
+  echo -e "\033[1;34You have less than 4GB of RAM, if errors occur in loader creation, please increase the amount of RAM.\033[0m\n"
 fi
 
 mkdir -p "${ADDONS_PATH}"
@@ -275,5 +277,6 @@ mkdir -p "${LKM_PATH}"
 # Load arc
 install-addons.sh
 install-extensions.sh
+echo -e "\033[1;34Loading Arc Loader Overlay...\033[0m"
 sleep 3
 arc.sh
