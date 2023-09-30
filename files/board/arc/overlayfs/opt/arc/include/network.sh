@@ -1,17 +1,7 @@
 # Get Network Config for Loader
 function getnet() {
   ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
-  writeConfigKey "cmdline.netif_num" "${ETHXNUM}" "${USER_CONFIG_FILE}"
-  # Get MAC address
-  for N in $(seq 1 ${#ETHX[@]}); do
-    # Get real Mac that is written to config while Init
-    MACR="$(readConfigKey "device.mac${N}" "${USER_CONFIG_FILE}")"
-    # Write real MAC to cmdline config
-    writeConfigKey "cmdline.mac${N}" "${MACR}" "${USER_CONFIG_FILE}"
-  done
   if [ "${ARCPATCH}" = "true" ]; then
-    # Set first Mac from cmdline config
-    writeConfigKey "cmdline.mac1" "" "${USER_CONFIG_FILE}"
     # Install with Arc Patch - Check for model config and set custom Mac Address
     [ -f "${TMP_PATH}/opts" ] && rm -f "${TMP_PATH}/opts"
     touch "${TMP_PATH}/opts"
@@ -25,7 +15,7 @@ function getnet() {
         break
       fi
     done
-    dialog --clear --backtitle "$(backtitle)" \
+    dialog --clear --backtitle "$(backtitle)" --title "Mac Setting"\
       --menu "Network: MAC for 1. NIC" 0 0 0 \
       --file "${TMP_PATH}/opts" \
     2>"${TMP_PATH}/resp"
@@ -33,17 +23,48 @@ function getnet() {
     resp="$(<"${TMP_PATH}/resp")"
     [ -z "${resp}" ] && return 1
     MAC="${resp}"
-    writeConfigKey "cmdline.mac1" "${MAC}" "${USER_CONFIG_FILE}"
+  else
+    dialog --clear --backtitle "$(backtitle)" --title "Mac Setting" \
+      --menu "Use Hardware, Random, Custom MAC?" 0 0 0 \
+      1 "Use Hardware MAC" \
+      2 "Use Random MAC" \
+      3 "Use Custom MAC" \
+    2>"${TMP_PATH}/resp"
+    resp="$(<"${TMP_PATH}/resp")"
+    [ -z "${resp}" ] && return 1
+    if [ ${resp} -eq 1 ]; then
+      # Get real Mac
+      MAC="$(cat /sys/class/net/eth0/address | sed 's/://g')"
+    elif [ ${resp} -eq 2 ]; then
+      # Generate Random Mac
+      MAC=($(generateMacAddress "${MODEL}" 1))
+    elif [ ${resp} -eq 3 ]; then
+      # User Mac
+      MAC="$(cat /sys/class/net/eth0/address | sed 's/://g')"
+      RET=1
+      while true; do
+        dialog --backtitle "$(backtitle)" --title "Mac Setting" \
+          --inputbox "Type a custom MAC address of mac1.\n Eq. 001132123456" 0 0 "${MAC}"\
+          2>"${TMP_PATH}/resp"
+        RET=$?
+        [ ${RET} -ne 0 ] && break 2
+        MAC="$(<"${TMP_PATH}/resp")"
+        [ "${MAC}" = "" ] && MAC="$(readConfigKey "arc.mac1" "${USER_CONFIG_FILE}")"
+        [ "${MAC}" = "" ] && MAC="$(cat /sys/class/net/eth0/address | sed 's/://g')"
+        MAC="$(echo "${MAC}" | sed "s/:\|-\| //g")"
+        [ ${#MAC} -eq 12 ] && break
+        dialog --backtitle "$(backtitle)" --title "Mac Setting" --msgbox "Invalid MAC" 0 0
+      done
+    fi
+    dialog --backtitle "$(backtitle)" --title "Mac Setting" --msgbox "MAC for 1. NIC set to:\n ${MAC}" 0 0
   fi
+  writeConfigKey "arc.mac1" "${MAC}" "${USER_CONFIG_FILE}"
 }
 
-# Get actual IP and ETHXNUM
-STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
-BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
-if [ "${STATICIP}" = "true" ] && [ ${BOOTCOUNT} -gt 0 ]; then
-  IP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+# Get actual IP
+ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+if [ "${ARCIP}" != "" ]; then
+  IP="${ARCIP}"
 else
   IP="$(ip route 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p' | head -1)"
 fi
-ETHXNUM=$(ls /sys/class/net/ | grep eth | wc -l) # Amount of NIC
-ETHX=($(ls /sys/class/net/ | grep eth))  # Real NIC List

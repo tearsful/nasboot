@@ -58,11 +58,9 @@ ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
 BOOTIPWAIT="$(readConfigKey "arc.bootipwait" "${USER_CONFIG_FILE}")"
 BOOTWAIT="$(readConfigKey "arc.bootwait" "${USER_CONFIG_FILE}")"
 REMAP="$(readConfigKey "arc.remap" "${USER_CONFIG_FILE}")"
-NOTSETMAC="$(readConfigKey "arc.notsetmac" "${USER_CONFIG_FILE}")"
-NOTSETWOL="$(readConfigKey "arc.notsetwol" "${USER_CONFIG_FILE}")"
 KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
-STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
 ODP="$(readConfigKey "arc.odp" "${USER_CONFIG_FILE}")"
+MAC1="$(readConfigKey "arc.mac1" "${USER_CONFIG_FILE}")"
 
 ###############################################################################
 # Mounts backtitle dynamically
@@ -200,31 +198,17 @@ function arcMenu() {
     writeConfigKey "arc.confdone" "false" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.paturl" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.pathash" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "sn" "" "${USER_CONFIG_FILE}"
     CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
     BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
     if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
       # Delete old files
       rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
     fi
-  else
-    # Ask for Clean
-    dialog --clear --backtitle "$(backtitle)" \
-      --menu "Clean old Loader Files?" 0 0 0 \
-      1 "Yes" \
-      2 "No" \
-    2>"${TMP_PATH}/resp"
-    resp="$(<"${TMP_PATH}/resp")"
-    [ -z "${resp}" ] && return 1
-    if [ ${resp} -eq 1 ]; then
-      if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
-        # Delete old files
-        rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
-      fi
-      arcbuild
-    elif [ ${resp} -eq 2 ]; then
-      arcbuild
-    fi
   fi
+  arcbuild
 }
 
 ###############################################################################
@@ -338,10 +322,7 @@ function arcsettings() {
   getmap
   # Select Extensions
   extensionSelection
-  # All Settings done
-  dialog --backtitle "$(backtitle)" --title "Arc Config" \
-    --infobox "Configuration successful!" 0 0
-  sleep 1
+  # Check Warnings
   if [ ${WARNON} -eq 1 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
       --msgbox "WARN: Your Controller has more than 8 Disks connected. Max Disks per Controller: 8" 0 0
@@ -504,12 +485,8 @@ function make() {
   RAMDISK_HASH="$(sha256sum "${ORI_RDGZ_FILE}" | awk '{print $1}')"
   writeConfigKey "ramdisk-hash" "${RAMDISK_HASH}" "${USER_CONFIG_FILE}"
   # Update PAT Info for Update
-  PAT_MODEL="$(echo "${MODEL}" | sed -e 's/\./%2E/g' -e 's/+/%2B/g')"
-  PAT_MAJOR="$(echo "${PRODUCTVER}" | cut -b 1)"
-  PAT_MINOR="$(echo "${PRODUCTVER}" | cut -b 3)"
-  PAT_URL="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${PAT_MODEL}&major=${PAT_MAJOR}&minor=${PAT_MINOR}" | jq -r '.info.system.detail[0].items[0].files[0].url')"
-  PAT_HASH="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${PAT_MODEL}&major=${PAT_MAJOR}&minor=${PAT_MINOR}" | jq -r '.info.system.detail[0].items[0].files[0].checksum')"
-  PAT_URL="${PAT_URL%%\?*}"
+  PAT_URL="$(cat ${UNTAR_PAT_PATH}/pat_url)"
+  PAT_HASH="$(cat ${UNTAR_PAT_PATH}/pat_hash)"
   writeConfigKey "arc.pathash" "${PAT_HASH}" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
   # Patch zImage
@@ -812,11 +789,10 @@ function cmdlineMenu() {
   echo "1 \"Add/edit a Cmdline item\""                          >"${TMP_PATH}/menu"
   echo "2 \"Delete Cmdline item(s)\""                           >>"${TMP_PATH}/menu"
   echo "3 \"Define a serial number\""                           >>"${TMP_PATH}/menu"
-  echo "4 \"Define a custom MAC\""                              >>"${TMP_PATH}/menu"
-  echo "5 \"Add experimental CPU Fix\""                         >>"${TMP_PATH}/menu"
-  echo "6 \"Add experimental RAM Fix\""                         >>"${TMP_PATH}/menu"
-  echo "7 \"Show user Cmdline\""                                >>"${TMP_PATH}/menu"
-  echo "8 \"Show Model/Build Cmdline\""                         >>"${TMP_PATH}/menu"
+  echo "4 \"Add experimental CPU Fix\""                         >>"${TMP_PATH}/menu"
+  echo "5 \"Add experimental RAM Fix\""                         >>"${TMP_PATH}/menu"
+  echo "6 \"Show user Cmdline\""                                >>"${TMP_PATH}/menu"
+  echo "7 \"Show Model/Build Cmdline\""                         >>"${TMP_PATH}/menu"
   # Loop menu
   while true; do
     dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
@@ -886,44 +862,6 @@ function cmdlineMenu() {
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       4)
-        for N in $(seq 1 8); do # Currently, only up to 8 are supported.  (<==> boot.sh L96, <==> lkm: MAX_NET_IFACES)
-          MACR="$(cat /sys/class/net/${ETHX[$((${N} - 1))]}/address | sed 's/://g')"
-          MACF=${CMDLINE["mac${N}"]}
-          [ -n "${MACF}" ] && MAC=${MACF} || MAC=${MACR}
-          RET=1
-          while true; do
-            dialog --backtitle "$(backtitle)" --title "User cmdline" \
-              --inputbox "Type a custom MAC address of mac${N}" 0 0 "${MAC}"\
-              2>"${TMP_PATH}/resp"
-            RET=$?
-            [ ${RET} -ne 0 ] && break 2
-            MAC="$(<"${TMP_PATH}/resp")"
-            [ -z "${MAC}" ] && MAC="$(readConfigKey "device.mac${i}" "${USER_CONFIG_FILE}")"
-            [ -z "${MAC}" ] && MAC="${MACFS[$((${i} - 1))]}"
-            MACF="$(echo "${MAC}" | sed "s/:\|-\| //g")"
-            [ ${#MACF} -eq 12 ] && break
-            dialog --backtitle "$(backtitle)" --title "User cmdline" --msgbox "Invalid MAC" 0 0
-          done
-          if [ ${RET} -eq 0 ]; then
-            CMDLINE["mac${N}"]="${MACF}"
-            CMDLINE["netif_num"]=${N}
-            writeConfigKey "cmdline.mac${N}"      "${MACF}" "${USER_CONFIG_FILE}"
-            writeConfigKey "cmdline.netif_num"    "${N}"    "${USER_CONFIG_FILE}"
-            MAC="${MACF:0:2}:${MACF:2:2}:${MACF:4:2}:${MACF:6:2}:${MACF:8:2}:${MACF:10:2}"
-            ip link set dev ${ETHX[$((${N} - 1))]} address "${MAC}" 2>&1 | dialog --backtitle "$(backtitle)" \
-              --title "User cmdline" --progressbox "Changing MAC" 20 70
-            /etc/init.d/S41dhcpcd restart 2>&1 | dialog --backtitle "$(backtitle)" \
-              --title "User cmdline" --progressbox "Renewing IP" 20 70
-            IP="$(ip route 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p' | head -1)"
-            dialog --backtitle "$(backtitle)" --title "Alert" \
-              --yesno "Continue with next MAC?" 0 0
-            [ $? -ne 0 ] && break
-          fi
-        done
-        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
-        BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
-        ;;
-      5)
         writeConfigKey "cmdline.nmi_watchdog" "0" "${USER_CONFIG_FILE}"
         writeConfigKey "cmdline.tsc" "reliable" "${USER_CONFIG_FILE}"
         dialog --backtitle "$(backtitle)" --title "CPU Fix" \
@@ -931,7 +869,7 @@ function cmdlineMenu() {
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
-      6)
+      5)
         writeConfigKey "cmdline.disable_mtrr_trim" "0" "${USER_CONFIG_FILE}"
         writeConfigKey "cmdline.crashkernel" "192M" "${USER_CONFIG_FILE}"
         dialog --backtitle "$(backtitle)" --title "RAM Fix" \
@@ -939,7 +877,7 @@ function cmdlineMenu() {
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
-      7)
+      6)
         ITEMS=""
         for KEY in ${!CMDLINE[@]}; do
           ITEMS+="${KEY}: ${CMDLINE[$KEY]}\n"
@@ -947,7 +885,7 @@ function cmdlineMenu() {
         dialog --backtitle "$(backtitle)" --title "User cmdline" \
           --aspect 18 --msgbox "${ITEMS}" 0 0
         ;;
-      8)
+      7)
         ITEMS=""
         while IFS=': ' read -r KEY VALUE; do
           ITEMS+="${KEY}: ${VALUE}\n"
@@ -1949,6 +1887,8 @@ function sysinfo() {
   [ -d /sys/firmware/efi ] && BOOTSYS="EFI" || BOOTSYS="Legacy"
   VENDOR="$(dmidecode -s system-product-name)"
   BOARD="$(dmidecode -s baseboard-product-name)"
+  ETHXNUM=$(ls /sys/class/net/ | grep eth | wc -l) # Amount of NIC
+  ETHX=($(ls /sys/class/net/ | grep eth))  # Real NIC List
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   if [ "${CONFDONE}" = "true" ]; then
@@ -1970,7 +1910,6 @@ function sysinfo() {
   fi
   DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
   BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
-  STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
   USBMOUNT="$(readConfigKey "arc.usbmount" "${USER_CONFIG_FILE}")"
   LKM="$(readConfigKey "lkm" "${USER_CONFIG_FILE}")"
   KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
@@ -1997,21 +1936,22 @@ function sysinfo() {
         TEXT+="\n  ${DRIVER}: \ZbIP: NOT CONNECTED | MAC: ${MAC}\Zn"
         break
       fi
-      IP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
-      if [ "${ETHX[${N}]}" = "eth0" ] && [ "${STATICIP}" = "true" ] && [ ${BOOTCOUNT} -gt 0 ]; then
-        IP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+      NETIP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
+      ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+      if [ "${ETHX[${N}]}" = "eth0" ] && [ "${ARCIP}" != "" ] && [ ${BOOTCOUNT} -gt 0 ]; then
+        NETIP="${ARCIP}"
         MSG="STATIC"
       else
         MSG="DHCP"
       fi
-      if [ -n "${IP}" ]; then
+      if [ -n "${NETIP}" ]; then
         SPEED=$(ethtool ${ETHX[${N}]} | grep "Speed:" | awk '{print $2}')
-        TEXT+="\n  ${DRIVER} (${SPEED} | ${MSG}): \ZbIP: ${IP} | Mac: ${MAC}\Zn"
+        TEXT+="\n  ${DRIVER} (${SPEED} | ${MSG}): \ZbIP: ${NETIP} | Mac: ${MAC}\Zn"
         break
       fi
       COUNT=$((${COUNT} + 1))
       if [ ${COUNT} -eq 3 ]; then
-        TEXT+="\n  ${DRIVER}: \ZbIP: TIMEOUT| MAC: ${MAC}\Zn"
+        TEXT+="\n  ${DRIVER}: \ZbIP: TIMEOUT | MAC: ${MAC}\Zn"
         break
       fi
       sleep 1
@@ -2021,7 +1961,7 @@ function sysinfo() {
   TEXT+="\n"
   TEXT+="\n\Z4> Arc: ${ARC_VERSION}\Zn"
   TEXT+="\n  Subversion Loader: \ZbAddons ${ADDONSVERSION} | LKM ${LKMVERSION} | Patches ${PATCHESVERSION}\Zn"
-  TEXT+="\n  Subversion DSM: \ZbModules ${MODULESVERSION} | Extensions ${EXTENSIONSVERSION} | Configs ${CONFIGSVERSION}\Zn"
+  TEXT+="\n  Subversion Arc/DSM: \ZbModules ${MODULESVERSION} | Extensions ${EXTENSIONSVERSION} | Configs ${CONFIGSVERSION}\Zn"
   TEXT+="\n"
   TEXT+="\n\Z4>> DSM ${PRODUCTVER}: ${MODEL}\Zn"
   TEXT+="\n   Kernel | LKM: \Zb${KVER} | ${LKM}\Zn"
@@ -2130,10 +2070,10 @@ function staticIPMenu() {
     TEXT+="NETMASK: ${NETMASK}\n"
   fi
   TEXT+="Do you want to change Config?"
-  dialog --backtitle "$(backtitle)" --title "Static IP" \
+  dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" \
       --yesno "${TEXT}" 0 0
   [ $? -ne 0 ] && return 1
-  dialog --clear --backtitle "$(backtitle)" --title "Static IP" \
+  dialog --clear --backtitle "$(backtitle)" --title "DHCP/Static IP" \
     --menu "DHCP or STATIC?" 0 0 0 \
       1 "DHCP" \
       2 "STATIC" \
@@ -2142,22 +2082,20 @@ function staticIPMenu() {
     [ -z "${opts}" ] && return 1
     if [ ${opts} -eq 1 ]; then
       echo -e "DEVICE=eth0\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${TMP_PATH}/ifcfg-eth0"
-      writeConfigKey "arc.staticip" "false" "${USER_CONFIG_FILE}"
     elif [ ${opts} -eq 2 ]; then
-      dialog --backtitle "$(backtitle)" --title "Static IP" \
-        --inputbox "Type a Static IP" 0 0 "${IPADDR}" \
+      dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" \
+        --inputbox "Type a Static IP\n Eq: 192.168.0.1" 0 0 "${IPADDR}" \
         2>"${TMP_PATH}/resp"
       [ $? -ne 0 ] && return 1
       IPADDR="$(<"${TMP_PATH}/resp")"
-      dialog --backtitle "$(backtitle)" --title "Static IP" \
-        --inputbox "Type a Netmask" 0 0 "${NETMASK}" \
+      dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" \
+        --inputbox "Type a Netmask\n Eq: 255.255.255.0" 0 0 "${NETMASK}" \
         2>"${TMP_PATH}/resp"
       [ $? -ne 0 ] && return 1
       NETMASK="$(<"${TMP_PATH}/resp")"
       echo -e "DEVICE=eth0\nBOOTPROTO=static\nONBOOT=yes\nIPV6INIT=off\nIPADDR=${IPADDR}\nNETMASK=${NETMASK}" >"${TMP_PATH}/ifcfg-eth0"
-      writeConfigKey "arc.staticip" "true" "${USER_CONFIG_FILE}"
     fi
-    dialog --backtitle "$(backtitle)" --title "Static IP" \
+    dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" \
       --yesno "Do you want to set this Config?" 0 0
     [ $? -ne 0 ] && return 1
     (
@@ -2170,8 +2108,20 @@ function staticIPMenu() {
       done
       rm -rf "${TMP_PATH}/sdX1"
     )
-    dialog --backtitle "$(backtitle)" --title "Static IP" --colors --aspect 18 \
-      --msgbox "IP Settings done!" 0 0
+    if [ -n "${IPADDR}" ] && [ -n "${NETMASK}" ]; then
+      IP="${IPADDR}"
+      NETMASK=$(convert_netmask "${NETMASK}")
+      ip addr add ${IP}/${NETMASK} dev eth0
+      writeConfigKey "arc.ip" "${IPADDR}" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.netmask" "${NETMASK}" "${USER_CONFIG_FILE}"
+      dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" --colors --aspect 18 \
+      --msgbox "IP Settings to STATIC done!." 0 0
+    else
+      writeConfigKey "arc.ip" "" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.netmask" "" "${USER_CONFIG_FILE}"
+      dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" --colors --aspect 18 \
+      --msgbox "IP Settings to DHCP done!" 0 0
+    fi
 }
 
 ###############################################################################
@@ -2420,8 +2370,6 @@ while true; do
     if [ "${BOOTOPTS}" = "true" ]; then
       echo "= \"\Z4========== Boot =========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "m \"DSM Kernelload: \Z4${KERNELLOAD}\Zn \" "                                    >>"${TMP_PATH}/menu"
-      echo "n \"Boot MAC disable: \Z4${NOTSETMAC}\Zn \" "                                   >>"${TMP_PATH}/menu"
-      echo "o \"Boot WOL disable: \Z4${NOTSETWOL}\Zn \" "                                   >>"${TMP_PATH}/menu"
       if [ "${DIRECTBOOT}" = "false" ]; then
         echo "p \"Boot IP Waittime: \Z4${BOOTIPWAIT}\Zn \" "                                >>"${TMP_PATH}/menu"
         echo "- \"Boot Waittime: \Z4${BOOTWAIT}\Zn \" "                                     >>"${TMP_PATH}/menu"
@@ -2441,8 +2389,8 @@ while true; do
       echo "= \"\Z4========== DSM ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "s \"Allow DSM Downgrade \" "                                                    >>"${TMP_PATH}/menu"
       echo "t \"Reset DSM Password \" "                                                     >>"${TMP_PATH}/menu"
-      echo ". \"Static IP Settings \" "                                                     >>"${TMP_PATH}/menu"
-      echo ", \"Official Driver Priority: \Z4${ODP}\Zn \" "                                  >>"${TMP_PATH}/menu"
+      echo ". \"DHCP/Static IP Settings \" "                                                >>"${TMP_PATH}/menu"
+      echo ", \"Official Driver Priority: \Z4${ODP}\Zn \" "                                 >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
     if [ "${DEVOPTS}" = "true" ]; then
@@ -2505,14 +2453,6 @@ while true; do
     m) [ "${KERNELLOAD}" = "kexec" ] && KERNELLOAD='power' || KERNELLOAD='kexec'
       writeConfigKey "arc.kernelload" "${KERNELLOAD}" "${USER_CONFIG_FILE}"
       NEXT="m"
-      ;;
-    n) [ "${NOTSETMAC}" = "false" ] && NOTSETMAC='true' || NOTSETMAC='false'
-      writeConfigKey "arc.notsetmac" "${NOTSETMAC}" "${USER_CONFIG_FILE}"
-      NEXT="n"
-      ;;
-    o) [ "${NOTSETWOL}" = "false" ] && NOTSETWOL='true' || NOTSETWOL='false'
-      writeConfigKey "arc.notsetwol" "${NOTSETWOL}" "${USER_CONFIG_FILE}"
-      NEXT="o"
       ;;
     p) bootipwaittime; NEXT="p" ;;
     -) bootwaittime; NEXT="-" ;;
