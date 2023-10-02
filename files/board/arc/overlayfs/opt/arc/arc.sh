@@ -479,29 +479,14 @@ function make() {
   if [ ${BOOTCOUNT} -gt 0 ] || [ -z "${BOOTCOUNT}" ]; then
     writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
   fi
-  # Write Hash to Config
-  ZIMAGE_HASH="$(sha256sum "${ORI_ZIMAGE_FILE}" | awk '{print $1}')"
-  writeConfigKey "zimage-hash" "${ZIMAGE_HASH}" "${USER_CONFIG_FILE}"
-  RAMDISK_HASH="$(sha256sum "${ORI_RDGZ_FILE}" | awk '{print $1}')"
-  writeConfigKey "ramdisk-hash" "${RAMDISK_HASH}" "${USER_CONFIG_FILE}"
-  # Update PAT Info for Update
-  PAT_URL="$(cat ${UNTAR_PAT_PATH}/pat_url)"
-  PAT_HASH="$(cat ${UNTAR_PAT_PATH}/pat_hash)"
-  writeConfigKey "arc.pathash" "${PAT_HASH}" "${USER_CONFIG_FILE}"
-  writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
-  # Patch zImage
-  if ! /opt/arc/zimage-patch.sh; then
-    dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
-      --msgbox "zImage not patched:\n$(<"${LOG_FILE}")" 0 0
+  livepatch
+  if [ ${FAIL} -eq 1 ]; then
+    echo "Patching DSM Files failed! Please stay patient for Update."
+    sleep 5
     return 1
+  else
+    echo "DSM Files patched - Ready!"
   fi
-  # Patch Ramdisk
-  if ! /opt/arc/ramdisk-patch.sh; then
-    dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
-      --msgbox "Ramdisk not patched:\n$(<"${LOG_FILE}")" 0 0
-    return 1
-  fi
-  echo "DSM Files patched - Ready!"
   sleep 3
   if [ -f "${ORI_ZIMAGE_FILE}" ] && [ -f "${ORI_RDGZ_FILE}" ] && [ -f "${MOD_ZIMAGE_FILE}" ] && [ -f "${MOD_RDGZ_FILE}" ]; then
     # Build is done
@@ -524,6 +509,7 @@ function make() {
   else
     dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
       --msgbox "Build failed!\nPlease check your Internetconnection and Diskspace!" 0 0
+    return 1
   fi
 }
 
@@ -2393,7 +2379,7 @@ while true; do
     if [ "${DSMOPTS}" = "true" ]; then
       echo "= \"\Z4========== DSM ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "s \"Allow DSM Downgrade \" "                                                    >>"${TMP_PATH}/menu"
-      echo "t \"Reset DSM Password \" "                                                     >>"${TMP_PATH}/menu"
+      echo "t \"Change DSM Password \" "                                                    >>"${TMP_PATH}/menu"
       echo ". \"DHCP/Static IP Settings \" "                                                >>"${TMP_PATH}/menu"
       echo ", \"Official Driver Priority: \Z4${ODP}\Zn \" "                                 >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
