@@ -60,7 +60,7 @@ BOOTWAIT="$(readConfigKey "arc.bootwait" "${USER_CONFIG_FILE}")"
 REMAP="$(readConfigKey "arc.remap" "${USER_CONFIG_FILE}")"
 KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
 ODP="$(readConfigKey "arc.odp" "${USER_CONFIG_FILE}")"
-MAC1="$(readConfigKey "arc.mac1" "${USER_CONFIG_FILE}")"
+STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
 
 ###############################################################################
 # Mounts backtitle dynamically
@@ -200,7 +200,8 @@ function arcMenu() {
     writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.paturl" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.pathash" "" "${USER_CONFIG_FILE}"
-    writeConfigKey "sn" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.sn" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.mac1" "" "${USER_CONFIG_FILE}"
     CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
     BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
     if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
@@ -295,13 +296,13 @@ function arcsettings() {
       if [ ${resp} -eq 1 ]; then
         # read valid serial from file
         SN="$(readModelKey "${MODEL}" "arc.serial")"
-        writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
         writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.patch" "true" "${USER_CONFIG_FILE}"
       elif [ ${resp} -eq 2 ]; then
         # Generate random serial
         SN="$(generateSerial "${MODEL}")"
-        writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
         writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
       fi
@@ -311,7 +312,7 @@ function arcsettings() {
   else
     # Generate random serial
     SN="$(generateSerial "${MODEL}")"
-    writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
     writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
   fi
@@ -365,7 +366,6 @@ function arcsettings() {
 ###############################################################################
 # Building Loader
 function make() {
-  clear
   MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
   PLATFORM="$(readModelKey "${MODEL}" "platform")"
   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
@@ -391,16 +391,31 @@ function make() {
       return 1
     fi
   done < <(readConfigMap "extensions" "${USER_CONFIG_FILE}")
+  # Update PAT Data
+  dialog --backtitle "$(backtitle)" --colors --title "Arc Build" \
+    --infobox "Get PAT Data ..." 0 0
+  idx=0
+  while [ ${idx} -le 3 ]; do # Loop 3 times, if successful, break
+    PAT_URL="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${MODEL/+/%2B}&major=${PRODUCTVER%%.*}&minor=${PRODUCTVER##*.}" | jq -r '.info.system.detail[0].items[0].files[0].url')"
+    PAT_HASH="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${MODEL/+/%2B}&major=${PRODUCTVER%%.*}&minor=${PRODUCTVER##*.}" | jq -r '.info.system.detail[0].items[0].files[0].checksum')"
+    PAT_URL=${PAT_URL%%\?*}
+    if [ -n "${PAT_URL}" ] && [ -n "${PAT_HASH}" ]; then
+      break
+    fi
+    idx=$((${idx} + 1))
+  done
+  [ -z "${PAT_URL}" ] || [ -z "${PAT_HASH}" ] && return
+  writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
+  writeConfigKey "arc.pathash" "${PAT_HASH}" "${USER_CONFIG_FILE}"
   if [ ! -f "${ORI_ZIMAGE_FILE}" ] || [ ! -f "${ORI_RDGZ_FILE}" ]; then
-    # Clean old files
+    # Clean old Files
     rm -rf "${UNTAR_PAT_PATH}"
     rm -rf "${CACHE_PATH}/${MODEL}/${PRODUCTVER}"
-    # Check for existing files
+    # Check for existing Files
     mkdir -p "${CACHE_PATH}/${MODEL}/${PRODUCTVER}"
     DSM_FILE="${CACHE_PATH}/${MODEL}/${PRODUCTVER}/dsm.tar"
-    DSM_MODEL="$(echo "${MODEL}" | sed -e 's/+/%2B/g')"
-    # Get new files
-    DSM_LINK="${DSM_MODEL}/${PRODUCTVER}/dsm.tar"
+    # Get new Files
+    DSM_LINK="${MODEL/+/%2B}/${PRODUCTVER}/dsm.tar"
     DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${DSM_LINK}"
     STATUS=$(curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}")
     if [ $? -ne 0 ] || [ ${STATUS} -ne 200 ]; then
@@ -410,58 +425,12 @@ function make() {
       DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${DSM_LINK}"
       STATUS=$(curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}")
       if [ $? -ne 0 ] || [ ${STATUS} -ne 200 ]; then
-        dialog --backtitle "$(backtitle)" --title "DSM Download" --aspect 18 \
-        --msgbox "No DSM Image found!\nTry Syno Link." 0 0
-        # Grep Values
-        PAT_MODEL="$(echo "${MODEL}" | sed -e 's/+/%2B/g')"
-        PAT_MAJOR="$(echo "${PRODUCTVER}" | cut -b 1)"
-        PAT_MINOR="$(echo "${PRODUCTVER}" | cut -b 3)"
-        # Grep PAT_URL
-        PAT_URL="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${PAT_MODEL}&major=${PAT_MAJOR}&minor=${PAT_MINOR}" | jq -r '.info.system.detail[0].items[0].files[0].url')"
-        PAT_URL="${PAT_URL%%\?*}"
-        PAT_FILE="${MODEL}_${PRODUCTVER}.pat"
-        PAT_PATH="${CACHE_PATH}/dl/${PAT_FILE}"
-        mkdir -p "${CACHE_PATH}/dl"
-        STATUS=$(curl -k -w "%{http_code}" -L "${PAT_URL}" -o "${PAT_PATH}" --progress-bar)
-        if [ $? -ne 0 ] || [ ${STATUS} -ne 200 ]; then
-          dialog --backtitle "$(backtitle)" --title "DSM Download" --aspect 18 \
-            --msgbox "No DSM Image found!\ Exit." 0 0
-          rm -f "${PAT_PATH}"
-          return 1
-        fi
-        # Extract Files
-        rm -rf "${UNTAR_PAT_PATH}"
-        mkdir -p "${UNTAR_PAT_PATH}"
-        header=$(od -bcN2 ${PAT_PATH} | head -1 | awk '{print $3}')
-        case ${header} in
-            105)
-            echo "Uncompressed tar"
-            isencrypted="no"
-            ;;
-            213)
-            echo "Compressed tar"
-            isencrypted="no"
-            ;;
-            255)
-            echo "Encrypted"
-            isencrypted="yes"
-            ;;
-            *)
-            echo -e "Could not determine if pat file is encrypted or not, maybe corrupted, try again!"
-            ;;
-        esac
-        if [ "${isencrypted}" = "yes" ]; then
-            # Uses the extractor to untar PAT file
-            LD_LIBRARY_PATH="${EXTRACTOR_PATH}" "${EXTRACTOR_PATH}/${EXTRACTOR_BIN}" "${PAT_PATH}" "${UNTAR_PAT_PATH}"
-        else
-            # Untar PAT file
-            tar -xf "${PAT_PATH}" -C "${UNTAR_PAT_PATH}" >"${LOG_FILE}" 2>&1
-        fi
-        # Cleanup PAT Download
-        rm -rf "${CACHE_PATH}/dl"
+        dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
+        --msgbox "DSM Image download failed!" 0 0
+        return 1
       fi
-      dialog --backtitle "$(backtitle)" --title "DSM Extraction" --aspect 18 \
-        --msgbox "DSM Extraction successful!" 0 0
+      dialog --backtitle "$(backtitle)" --title "DSM Download" --aspect 18 \
+        --msgbox "DSM Download successful!" 0 0
     fi
     if [ -f "${DSM_FILE}" ]; then
       mkdir -p "${UNTAR_PAT_PATH}"
@@ -474,11 +443,23 @@ function make() {
     cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${SLPART_PATH}"
     cp -f "${UNTAR_PAT_PATH}/zImage"          "${ORI_ZIMAGE_FILE}"
     cp -f "${UNTAR_PAT_PATH}/rd.gz"           "${ORI_RDGZ_FILE}"
+    # Check Pat Hash
+    PAT_HASH="$(readConfigKey "arc.paturl" "${USER_CONFIG_FILE}")"
+    PAT_URL_PRE="$(cat ${UNTAR_PAT_PATH}/pat_url)"
+    PAT_HASH="$(readConfigKey "arc.pathash" "${USER_CONFIG_FILE}")"
+    PAT_HASH_PRE="$(cat ${UNTAR_PAT_PATH}/pat_hash)"
+    if [ "${PAT_URL}" != "${PAT_URL_PRE}" ] || [ "${PAT_HASH}" != "${PAT_HASH_PRE}" ]; then
+      dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
+        --msgbox "PAT Files do not match!\nTry with preloaded Files!" 0 0
+      writeConfigKey "arc.paturl" "${PAT_URL_PRE}" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.pathash" "${PAT_HASH_PRE}" "${USER_CONFIG_FILE}"
+    fi
   fi
   # Reset Bootcount if User rebuild DSM
   if [ ${BOOTCOUNT} -gt 0 ] || [ -z "${BOOTCOUNT}" ]; then
     writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
   fi
+  clear
   livepatch
   if [ ${FAIL} -eq 1 ]; then
     echo "Patching DSM Files failed! Please stay patient for Update."
@@ -508,7 +489,7 @@ function make() {
     fi
   else
     dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
-      --msgbox "Build failed!\nPlease check your Internetconnection and Diskspace!" 0 0
+      --msgbox "Build failed!\nPlease check your Connection and Diskspace!" 0 0
     return 1
   fi
 }
@@ -529,7 +510,7 @@ function editUserConfig() {
   OLDPRODUCTVER="${PRODUCTVER}"
   MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
-  SN="$(readConfigKey "sn" "${USER_CONFIG_FILE}")"
+  SN="$(readConfigKey "arc.sn" "${USER_CONFIG_FILE}")"
   if [ "${MODEL}" != "${OLDMODEL}" ] || [ "${PRODUCTVER}" != "${OLDPRODUCTVER}" ]; then
     # Remove old files
     rm -f "${MOD_ZIMAGE_FILE}"
@@ -780,8 +761,8 @@ function cmdlineMenu() {
   echo "1 \"Add/edit a Cmdline item\""                          >"${TMP_PATH}/menu"
   echo "2 \"Delete Cmdline item(s)\""                           >>"${TMP_PATH}/menu"
   echo "3 \"Define a serial number\""                           >>"${TMP_PATH}/menu"
-  echo "4 \"Add experimental CPU Fix\""                         >>"${TMP_PATH}/menu"
-  echo "5 \"Add experimental RAM Fix\""                         >>"${TMP_PATH}/menu"
+  echo "4 \"Add CPU Fix\""                                      >>"${TMP_PATH}/menu"
+  echo "5 \"Add RAM Fix\""                                      >>"${TMP_PATH}/menu"
   echo "6 \"Show user Cmdline\""                                >>"${TMP_PATH}/menu"
   echo "7 \"Show Model/Build Cmdline\""                         >>"${TMP_PATH}/menu"
   # Loop menu
@@ -848,7 +829,7 @@ function cmdlineMenu() {
           [ $? -eq 0 ] && break
         done
         SN="${SERIAL}"
-        writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
+        writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
@@ -1230,7 +1211,7 @@ function backupMenu() {
                     if [ -n "${SN}" ]; then
                       deleteConfigKey "arc.patch" "${USER_CONFIG_FILE}"
                       SNARC="$(readConfigKey "arc.serial" "${MODEL_CONFIG_PATH}/${MODEL}.yml")"
-                      writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
+                      writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
                       TEXT+="\nSerial: ${SN}"
                       if [ "${SN}" = "${SNARC}" ]; then
                         writeConfigKey "arc.patch" "true" "${USER_CONFIG_FILE}"
@@ -1395,7 +1376,7 @@ function backupMenu() {
                     if [ -n "${SN}" ]; then
                       deleteConfigKey "arc.patch" "${USER_CONFIG_FILE}"
                       SNARC="$(readConfigKey "arc.serial" "${MODEL_CONFIG_PATH}/${MODEL}.yml")"
-                      writeConfigKey "sn" "${SN}" "${USER_CONFIG_FILE}"
+                      writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
                       TEXT+="\nSerial: ${SN}"
                       if [ "${SN}" = "${SNARC}" ]; then
                         writeConfigKey "arc.patch" "true" "${USER_CONFIG_FILE}"
@@ -1878,8 +1859,8 @@ function sysinfo() {
   [ -d /sys/firmware/efi ] && BOOTSYS="EFI" || BOOTSYS="Legacy"
   VENDOR="$(dmidecode -s system-product-name)"
   BOARD="$(dmidecode -s baseboard-product-name)"
-  ETHXNUM=$(ls /sys/class/net/ | grep eth | wc -l) # Amount of NIC
-  ETHX=($(ls /sys/class/net/ | grep eth))  # Real NIC List
+  ETHX=($(ls /sys/class/net/ | grep eth))
+  NIC="$(readConfigKey "device.nic" "${USER_CONFIG_FILE}")"
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   if [ "${CONFDONE}" = "true" ]; then
@@ -1918,7 +1899,7 @@ function sysinfo() {
   TEXT+="\n  CPU: \Zb${CPUINFO}\Zn"
   TEXT+="\n  Memory: \Zb$((${RAMTOTAL} / 1024))GB\Zn"
   TEXT+="\n"
-  TEXT+="\n\Z4> Network: ${ETHXNUM} Adapter\Zn"
+  TEXT+="\n\Z4> Network: ${NIC} Adapter\Zn"
   for N in $(seq 0 $((${#ETHX[@]} - 1))); do
     DRIVER=$(ls -ld /sys/class/net/${ETHX[${N}]}/device/driver 2>/dev/null | awk -F '/' '{print $NF}')
     MAC="$(cat /sys/class/net/${ETHX[$((${N} - 1))]}/address | sed 's/://g')"
@@ -1928,16 +1909,20 @@ function sysinfo() {
         break
       fi
       NETIP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
-      ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
-      if [ "${ETHX[${N}]}" = "eth0" ] && [ "${ARCIP}" != "" ] && [ ${BOOTCOUNT} -gt 0 ]; then
-        NETIP="${ARCIP}"
-        MSG="STATIC"
+      if [ "${STATICIP}" = "true" ]; then
+        ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+        if [ "${ETHX[${N}]}" = "eth0" ] && [ -n "${ARCIP}" ]; then
+          NETIP="${ARCIP}"
+          MSG="STATIC"
+        else
+          MSG="DHCP"
+        fi
       else
         MSG="DHCP"
       fi
       if [ -n "${NETIP}" ]; then
         SPEED=$(ethtool ${ETHX[${N}]} | grep "Speed:" | awk '{print $2}')
-        TEXT+="\n  ${DRIVER} (${SPEED} | ${MSG}): \ZbIP: ${NETIP} | Mac: ${MAC}\Zn"
+        TEXT+="\n  ${DRIVER} (${SPEED} | ${MSG}) \ZbIP: ${NETIP} | Mac: ${MAC}\Zn"
         break
       fi
       COUNT=$((${COUNT} + 1))
@@ -1967,6 +1952,7 @@ function sysinfo() {
   TEXT+="\n   DSM Extensions selected: \Zb${EXTENSIONSINFO}\Zn"
   TEXT+="\n   Arc Modules loaded: \Zb${MODULESINFO}\Zn"
   TEXT+="\n\Z4>> Settings\Zn"
+  TEXT+="\n   Static IP: \Zb${STATICIP}\Zn"
   if [ "${REMAP}" = "acports" ] || [ "${REMAP}" = "maxports" ]; then
     TEXT+="\n   SataPortMap | DiskIdxMap: \Zb${PORTMAP} | ${DISKMAP}\Zn"
   elif [ "${REMAP}" = "remap" ]; then
@@ -2075,12 +2061,12 @@ function staticIPMenu() {
       echo -e "DEVICE=eth0\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${TMP_PATH}/ifcfg-eth0"
     elif [ ${opts} -eq 2 ]; then
       dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" \
-        --inputbox "Type a Static IP\n Eq: 192.168.0.1" 0 0 "${IPADDR}" \
+        --inputbox "Type a Static IP\nEq: 192.168.0.1" 0 0 "${IPADDR}" \
         2>"${TMP_PATH}/resp"
       [ $? -ne 0 ] && return 1
       IPADDR="$(<"${TMP_PATH}/resp")"
       dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" \
-        --inputbox "Type a Netmask\n Eq: 255.255.255.0" 0 0 "${NETMASK}" \
+        --inputbox "Type a Netmask\nEq: 255.255.255.0" 0 0 "${NETMASK}" \
         2>"${TMP_PATH}/resp"
       [ $? -ne 0 ] && return 1
       NETMASK="$(<"${TMP_PATH}/resp")"
@@ -2103,15 +2089,17 @@ function staticIPMenu() {
       IP="${IPADDR}"
       NETMASK=$(convert_netmask "${NETMASK}")
       ip addr add ${IP}/${NETMASK} dev eth0
+      writeConfigKey "arc.staticip" "true" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.ip" "${IPADDR}" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.netmask" "${NETMASK}" "${USER_CONFIG_FILE}"
       dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" --colors --aspect 18 \
-      --msgbox "IP Settings to STATIC done!." 0 0
+      --msgbox "Network set to STATIC!" 0 0
     else
+      writeConfigKey "arc.staticip" "false" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.ip" "" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.netmask" "" "${USER_CONFIG_FILE}"
       dialog --backtitle "$(backtitle)" --title "DHCP/Static IP" --colors --aspect 18 \
-      --msgbox "IP Settings to DHCP done!" 0 0
+      --msgbox "Network set to DHCP!" 0 0
     fi
 }
 
@@ -2297,12 +2285,10 @@ function boot() {
   if [ $? -eq 0 ]; then
     make
   fi
-  if [ "${DIRECTBOOT}" = "false" ]; then
-    grub-editenv "${GRUB_PATH}/grubenv" create
-  fi
   dialog --backtitle "$(backtitle)" --title "Arc Boot" \
     --infobox "Booting to DSM - Please stay patient!" 0 0
-  exec reboot
+  sleep 2
+  boot.sh
 }
 
 ###############################################################################
@@ -2448,6 +2434,7 @@ while true; do
     p) bootipwaittime; NEXT="p" ;;
     -) bootwaittime; NEXT="-" ;;
     q) [ "${DIRECTBOOT}" = "false" ] && DIRECTBOOT='true' || DIRECTBOOT='false'
+      grub-editenv "${GRUB_PATH}/grubenv" create
       writeConfigKey "arc.directboot" "${DIRECTBOOT}" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
       NEXT="q"

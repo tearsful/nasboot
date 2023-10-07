@@ -30,10 +30,10 @@ ZIMAGE_HASH_CUR="$(sha256sum "${ORI_ZIMAGE_FILE}" | awk '{print $1}')"
 RAMDISK_HASH="$(readConfigKey "ramdisk-hash" "${USER_CONFIG_FILE}")"
 RAMDISK_HASH_CUR="$(sha256sum "${ORI_RDGZ_FILE}" | awk '{print $1}')"
 if [ "${ZIMAGE_HASH_CUR}" != "${ZIMAGE_HASH}" ] || [ "${RAMDISK_HASH_CUR}" != "${RAMDISK_HASH}" ]; then
-  echo -e "\033[1;31mDSM zImage/Ramdisk changed! Try to Patch them.\033[0m"
+  echo -e "\033[1;34mDSM zImage/Ramdisk changed! Try to Patch them.\033[0m"
   livepatch
   if [ ${FAIL} -eq 1 ]; then
-    echo -e "\033[1;31mPatching DSM Files failed! Please stay patient for Update.\033[0m" 0 0
+    echo -e "\033[1;34mPatching DSM Files failed! Please stay patient for Update.\033[0m" 0 0
     exit 1
   fi
 fi
@@ -70,7 +70,7 @@ fi
 # Load necessary variables
 VID="$(readConfigKey "vid" "${USER_CONFIG_FILE}")"
 PID="$(readConfigKey "pid" "${USER_CONFIG_FILE}")"
-SN="$(readConfigKey "sn" "${USER_CONFIG_FILE}")"
+SN="$(readConfigKey "arc.sn" "${USER_CONFIG_FILE}")"
 MAC1="$(readConfigKey "arc.mac1" "${USER_CONFIG_FILE}")"
 
 declare -A CMDLINE
@@ -104,7 +104,7 @@ CMDLINE_LINE=""
 grep -q "force_junior" /proc/cmdline && CMDLINE_LINE+="force_junior "
 [ ${EFI} -eq 1 ] && CMDLINE_LINE+="withefi " || CMDLINE_LINE+="noefi "
 [ ! "${BUS}" = "usb" ] && CMDLINE_LINE+="synoboot_satadom=${DOM} dom_szmax=${SIZE} "
-CMDLINE_LINE+="console=ttyS0,115200n8 earlyprintk earlycon=uart8250,io,0x3f8,115200n8 root=/dev/md0 skip_vender_mac_interfaces=1,2,3,4,5,6,7 loglevel=15 log_buf_len=32M"
+CMDLINE_LINE+="console=ttyS0,115200n8 earlyprintk earlycon=uart8250,io,0x3f8,115200n8 root=/dev/md0 skip_vender_mac_interfaces=0,1,2,3,4,5,6,7 loglevel=15 log_buf_len=32M"
 for KEY in ${!CMDLINE[@]}; do
   VALUE="${CMDLINE[${KEY}]}"
   CMDLINE_LINE+=" ${KEY}"
@@ -115,6 +115,7 @@ echo
 
 # Grep Config Values
 DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
+# Read Bootcount
 BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
 [ -z "${BOOTCOUNT}" ] && BOOTCOUNT=0
 # Make Directboot persistent if DSM is installed
@@ -136,9 +137,11 @@ elif [ "${DIRECTBOOT}" = "true" ] && [ ${BOOTCOUNT} -eq 0 ]; then
   exec reboot
 elif [ "${DIRECTBOOT}" = "false" ]; then
   ETHX=($(ls /sys/class/net/ | grep eth)) # real network cards list
+  # Read Staticip/DHCP
+  STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
+  # Wait for an IP
   BOOTIPWAIT="$(readConfigKey "arc.bootipwait" "${USER_CONFIG_FILE}")"
-  [ -z "${BOOTIPWAIT}" ] && BOOTIPWAIT=20
-  echo -e "\033[1;34m${#ETHX[@]} NIC detected.\033[0m \033[1;37mWaiting for Connection:\033[0m"
+  echo -e "\033[1;34mDetected ${#ETHX[@]} NIC.\033[0m \033[1;37mWaiting for Connection:\033[0m"
   for N in $(seq 0 $((${#ETHX[@]} - 1))); do
     DRIVER=$(ls -ld /sys/class/net/${ETHX[${N}]}/device/driver 2>/dev/null | awk -F '/' '{print $NF}')
     COUNT=0
@@ -148,13 +151,17 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
         break
       fi
       IP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
-      ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
-      NETMASK="$(readConfigKey "arc.netmask" "${USER_CONFIG_FILE}")"
-      if [ "${ETHX[${N}]}" = "eth0" ] && [ "${ARCIP}" != "" ] && [ ${BOOTCOUNT} -gt 0 ]; then
-        IP="${ARCIP}"
-        NETMASK=$(convert_netmask "${NETMASK}")
-        ip addr add ${IP}/${NETMASK} dev eth0
-        MSG="STATIC"
+      if [ "${STATICIP}" = "true" ]; then
+        ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
+        NETMASK="$(readConfigKey "arc.netmask" "${USER_CONFIG_FILE}")"
+        if [ "${ETHX[${N}]}" = "eth0" ] && [ -n "${ARCIP}" ] && [ ${BOOTCOUNT} -gt 0 ]; then
+          IP="${ARCIP}"
+          NETMASK=$(convert_netmask "${NETMASK}")
+          ip addr add ${IP}/${NETMASK} dev eth0
+          MSG="STATIC"
+        else
+          MSG="DHCP"
+        fi
       else
         MSG="DHCP"
       fi
@@ -176,7 +183,7 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
   w | awk '{print $1" "$2" "$4" "$5" "$6}' >WB
   MSG=""
   while test ${BOOTWAIT} -ge 0; do
-    MSG="$(printf "%2ds (Accessing Arc will interrupt Boot)" "${BOOTWAIT}")"
+    MSG="$(printf "%2ds (Accessing Arc Overlay will interrupt Boot)" "${BOOTWAIT}")"
     echo -en "\r${MSG}"
     w | awk '{print $1" "$2" "$4" "$5" "$6}' >WC
     if ! diff WB WC >/dev/null 2>&1; then

@@ -164,10 +164,6 @@ installAddon localrss
 echo "/addons/localrss.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon misc
 echo "/addons/misc.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
-installAddon wol
-echo "/addons/wol.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
-installAddon acpid
-echo "/addons/acpid.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 
 # User Addons
 for ADDON in ${!ADDONS[@]}; do
@@ -189,18 +185,24 @@ for EXTENSION in ${!EXTENSIONS[@]}; do
   echo "/addons/${EXTENSION}.sh \${1} ${PARAMS}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 done
 
-# Enable Telnet
-echo "inetd" >>"${RAMDISK_PATH}/addons/addons.sh"
-
-[ "2" = "${BUILD:0:1}" ] && sed -i 's/function //g' $(find "${RAMDISK_PATH}/addons/" -type f -name "*.sh")
-
 # Build modules dependencies
 /opt/arc/depmod -a -b "${RAMDISK_PATH}" 2>/dev/null
 
 # Network card configuration file
 ETHX=($(ls /sys/class/net/ | grep eth))  # real network cards list
+STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
 for N in $(seq 0 $((${#ETHX[@]} - 1))); do
-  echo -e "DEVICE=eth${N}\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${RAMDISK_PATH}/etc/sysconfig/network-scripts/ifcfg-eth${N}"
+  if [ "${STATICIP}" = "true" ] && [ ${N} -eq 0 ]; then
+    IPADDR=$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")
+    NETMASK=$(readConfigKey "arc.netmask" "${USER_CONFIG_FILE}")
+    if [ -n "${IPADDR}" ] && [ -n "${NETMASK}" ]; then
+      echo -e "DEVICE=eth0\nBOOTPROTO=static\nONBOOT=yes\nIPV6INIT=off\nIPADDR=${IPADDR}\nNETMASK=${NETMASK}" >"${RAMDISK_PATH}/etc/sysconfig/network-scripts/ifcfg-eth${N}"
+    else
+      echo -e "DEVICE=eth0\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${RAMDISK_PATH}/etc/sysconfig/network-scripts/ifcfg-eth${N}"
+    fi
+  else
+    echo -e "DEVICE=eth${N}\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${RAMDISK_PATH}/etc/sysconfig/network-scripts/ifcfg-eth${N}"
+  fi
 done
 
 # Reassembly ramdisk
