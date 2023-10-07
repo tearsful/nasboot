@@ -393,7 +393,7 @@ function make() {
   done < <(readConfigMap "extensions" "${USER_CONFIG_FILE}")
   # Update PAT Data
   dialog --backtitle "$(backtitle)" --colors --title "Arc Build" \
-    --infobox "Get PAT Data..." 0 0
+    --infobox "Get PAT Data from Syno..." 3 30
   idx=0
   while [ ${idx} -le 3 ]; do # Loop 3 times, if successful, break
     PAT_URL="$(curl -skL "https://www.synology.com/api/support/findDownloadInfo?lang=en-us&product=${MODEL/+/%2B}&major=${PRODUCTVER%%.*}&minor=${PRODUCTVER##*.}" | jq -r '.info.system.detail[0].items[0].files[0].url')"
@@ -402,6 +402,7 @@ function make() {
     if [ -n "${PAT_URL}" ] && [ -n "${PAT_HASH}" ]; then
       break
     fi
+    sleep 1
     idx=$((${idx} + 1))
   done
   [ -z "${PAT_URL}" ] || [ -z "${PAT_HASH}" ] && return
@@ -426,11 +427,11 @@ function make() {
       STATUS=$(curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}")
       if [ $? -ne 0 ] || [ ${STATUS} -ne 200 ]; then
         dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
-        --msgbox "DSM Image download failed!" 0 0
+        --msgbox "DSM Image Download failed!" 0 0
         return 1
       fi
       dialog --backtitle "$(backtitle)" --title "DSM Download" --aspect 18 \
-        --msgbox "DSM Download successful!" 0 0
+        --msgbox "DSM Image Download successful!" 0 0
     fi
     if [ -f "${DSM_FILE}" ]; then
       mkdir -p "${UNTAR_PAT_PATH}"
@@ -462,11 +463,11 @@ function make() {
   clear
   livepatch
   if [ ${FAIL} -eq 1 ]; then
-    echo "Patching DSM Files failed! Please stay patient for Update."
+    echo "Patching DSM Image failed! Please stay patient for Update."
     sleep 5
     return 1
   else
-    echo "DSM Files patched - Ready!"
+    echo "DSM Image patched - Ready!"
   fi
   sleep 3
   if [ -f "${ORI_ZIMAGE_FILE}" ] && [ -f "${ORI_RDGZ_FILE}" ] && [ -f "${MOD_ZIMAGE_FILE}" ] && [ -f "${MOD_RDGZ_FILE}" ]; then
@@ -2272,8 +2273,10 @@ function cleanOld() {
     # Delete old files
     rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
   fi
+  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+  BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --colors --title "Clean Old" \
-    --msgbox "Clean is complete." 0 0
+    --msgbox "Clean is complete." 5 30
 }
 
 ###############################################################################
@@ -2307,8 +2310,8 @@ while true; do
   fi
   echo "= \"\Z4========== Info ==========\Zn \" "                                           >>"${TMP_PATH}/menu"
   echo "a \"Sysinfo \" "                                                                    >>"${TMP_PATH}/menu"
+  echo "= \"\Z4========= System =========\Zn \" "                                           >>"${TMP_PATH}/menu"
   if [ "${CONFDONE}" = "true" ]; then
-    echo "= \"\Z4========= System =========\Zn \" "                                         >>"${TMP_PATH}/menu"
     echo "b \"Loader Addons \" "                                                            >>"${TMP_PATH}/menu"
     echo "c \"DSM Extensions \" "                                                           >>"${TMP_PATH}/menu"
     echo "d \"DSM Modules \" "                                                              >>"${TMP_PATH}/menu"
@@ -2368,21 +2371,21 @@ while true; do
       echo "t \"Change DSM Password \" "                                                    >>"${TMP_PATH}/menu"
       echo ". \"DHCP/Static IP Settings \" "                                                >>"${TMP_PATH}/menu"
       echo ", \"Official Driver Priority: \Z4${ODP}\Zn \" "                                 >>"${TMP_PATH}/menu"
-      echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
-    fi
-    if [ "${DEVOPTS}" = "true" ]; then
-      echo "9 \"\Z1Hide Dev Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
-    else
-      echo "9 \"\Z1Show Dev Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
-    fi
-    if [ "${DEVOPTS}" = "true" ]; then
-      echo "= \"\Z4========== Dev ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "u \"Switch LKM version: \Z4${LKM}\Zn \" "                                       >>"${TMP_PATH}/menu"
-      echo "v \"Save Modifications to Disk \" "                                             >>"${TMP_PATH}/menu"
-      echo "w \"Clean old Loader Boot Files \" "                                            >>"${TMP_PATH}/menu"
-      echo "+ \"\Z1Format Disk(s)\Zn \" "                                                   >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
+  fi
+  if [ "${DEVOPTS}" = "true" ]; then
+    echo "9 \"\Z1Hide Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
+  else
+    echo "9 \"\Z1Show Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
+  fi
+  if [ "${DEVOPTS}" = "true" ]; then
+    echo "= \"\Z4========== Dev ==========\Zn \" "                                          >>"${TMP_PATH}/menu"
+    echo "v \"Save Modifications to Disk \" "                                               >>"${TMP_PATH}/menu"
+    echo "w \"Clean old Boot Files \" "                                                     >>"${TMP_PATH}/menu"
+    echo "+ \"\Z1Format Disk(s)\Zn \" "                                                     >>"${TMP_PATH}/menu"
+    echo "= \"\Z4=========================\Zn \" "                                          >>"${TMP_PATH}/menu"
   fi
   echo "= \"\Z4===== Loader Settings ====\Zn \" "                                           >>"${TMP_PATH}/menu"
   echo "x \"Backup/Restore/Recovery \" "                                                    >>"${TMP_PATH}/menu"
@@ -2456,14 +2459,14 @@ while true; do
       [ "${ODP}" = "false" ] && ODP='true' || ODP='false'
       writeConfigKey "arc.odp" "${ODP}" "${USER_CONFIG_FILE}"
       ;;
+    u) [ "${LKM}" = "prod" ] && LKM='dev' || LKM='prod'
+      writeConfigKey "lkm" "${LKM}" "${USER_CONFIG_FILE}"
+      NEXT="u"
+      ;;
     # Dev Section
     9) [ "${DEVOPTS}" = "true" ] && DEVOPTS='false' || DEVOPTS='true'
       DEVOPTS="${DEVOPTS}"
       NEXT="9"
-      ;;
-    u) [ "${LKM}" = "prod" ] && LKM='dev' || LKM='prod'
-      writeConfigKey "lkm" "${LKM}" "${USER_CONFIG_FILE}"
-      NEXT="u"
       ;;
     v) saveMenu; NEXT="v" ;;
     w) cleanOld; NEXT="w" ;;
