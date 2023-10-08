@@ -452,6 +452,7 @@ function make() {
     if [ "${PAT_URL}" != "${PAT_URL_PRE}" ] || [ "${PAT_HASH}" != "${PAT_HASH_PRE}" ]; then
       dialog --backtitle "$(backtitle)" --title "Error" --aspect 18 \
         --msgbox "PAT Files do not match!\nPreload Files need to be updated!" 0 0
+      return 1
     fi
   fi
   # Reset Bootcount if User rebuild DSM
@@ -2275,6 +2276,18 @@ function cleanOld() {
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --colors --title "Clean Old" \
     --msgbox "Clean is complete." 5 30
+
+###############################################################################
+# let user edit the grub.cfg
+function editGrubCfg() {
+  while true; do
+    dialog --backtitle "$(backtitle)" --colors --title "Edit grub.cfg with caution" \
+      --editbox "${GRUB_PATH}/grub.cfg" 0 0 2>"${TMP_PATH}/usergrub.cfg"
+    [ $? -ne 0 ] && return
+    mv -f "${TMP_PATH}/usergrub.cfg" "${GRUB_PATH}/grub.cfg"
+    break
+  done
+}
 }
 
 ###############################################################################
@@ -2381,6 +2394,7 @@ while true; do
   if [ "${DEVOPTS}" = "true" ]; then
     echo "= \"\Z4========== Dev ==========\Zn \" "                                          >>"${TMP_PATH}/menu"
     echo "v \"Save Modifications to Disk \" "                                               >>"${TMP_PATH}/menu"
+    echo "n \"Edit Grub Config \" "                                                         >>"${TMP_PATH}/menu"
     echo "w \"Clean old Boot Files \" "                                                     >>"${TMP_PATH}/menu"
     echo "+ \"\Z1Format Disk(s)\Zn \" "                                                     >>"${TMP_PATH}/menu"
     echo "= \"\Z4=========================\Zn \" "                                          >>"${TMP_PATH}/menu"
@@ -2467,6 +2481,7 @@ while true; do
       NEXT="9"
       ;;
     v) saveMenu; NEXT="v" ;;
+    n) editGrubCfg; NEXT="n" ;;
     w) cleanOld; NEXT="w" ;;
     +) formatdisks; NEXT="+" ;;
     # Loader Settings
