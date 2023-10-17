@@ -22,12 +22,6 @@ RAMTOTAL=$((${RAMTOTAL} * 1024))
 RAMMAX=$((${RAMTOTAL} * 2))
 RAMMIN=$((${RAMTOTAL} / 2))
 
-# Check for Controller
-SATACONTROLLER=$(lspci -d ::106 | wc -l)
-writeConfigKey "device.satacontroller" "${SATACONTROLLER}" "${USER_CONFIG_FILE}"
-SASCONTROLLER=$(lspci -d ::107 | wc -l)
-writeConfigKey "device.sascontroller" "${SASCONTROLLER}" "${USER_CONFIG_FILE}"
-
 # Check for Hypervisor
 if grep -q "^flags.*hypervisor.*" /proc/cpuinfo; then
   # Check for Hypervisor
@@ -395,6 +389,10 @@ function arcsettings() {
 ###############################################################################
 # Building Loader
 function make() {
+  # Clean old Files
+  rm -rf "${UNTAR_PAT_PATH}"
+  rm -rf "${CACHE_PATH}/${MODEL}/${PRODUCTVER}"
+  # Read Config
   MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
   PLATFORM="$(readModelKey "${MODEL}" "platform")"
   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
@@ -436,13 +434,14 @@ function make() {
     sleep 1
     idx=$((${idx} + 1))
   done
-  [ -z "${PAT_URL}" ] || [ -z "${PAT_HASH}" ] && return 1
+  if [ -z "${PAT_URL}" ] || [ -z "${PAT_HASH}" ]; then
+    dialog --backtitle "$(backtitle)" --colors --title "Arc Build" \
+      --infobox "Get PAT Data from Syno...\nFAILED!" 3 30
+    return 1
+  fi
   writeConfigKey "arc.paturl" "${PAT_URL}" "${USER_CONFIG_FILE}"
   writeConfigKey "arc.pathash" "${PAT_HASH}" "${USER_CONFIG_FILE}"
   if [ "${PAT_URL}" != "${PAT_URL_CONF}" ] || [ "${PAT_HASH}" != "${PAT_HASH_CONF}" ] || [ ! -f "${ORI_ZIMAGE_FILE}" ] || [ ! -f "${ORI_RDGZ_FILE}" ]; then
-    # Clean old Files
-    rm -rf "${UNTAR_PAT_PATH}"
-    rm -rf "${CACHE_PATH}/${MODEL}/${PRODUCTVER}"
     # Check for existing Files
     mkdir -p "${CACHE_PATH}/${MODEL}/${PRODUCTVER}"
     DSM_FILE="${CACHE_PATH}/${MODEL}/${PRODUCTVER}/dsm.tar"
@@ -500,6 +499,7 @@ function make() {
   sleep 3
   if [ -f "${ORI_ZIMAGE_FILE}" ] && [ -f "${ORI_RDGZ_FILE}" ] && [ -f "${MOD_ZIMAGE_FILE}" ] && [ -f "${MOD_RDGZ_FILE}" ]; then
     # Build is done
+    writeConfigKey "arc.version" "${ARC_VERSION}" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.builddone" "true" "${USER_CONFIG_FILE}"
     BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
     # Ask for Boot
@@ -1136,13 +1136,21 @@ function backupMenu() {
           dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
             --infobox "Restore Config from ${BACKUPDIR}" 0 0
           if [ -f "${BACKUPDIR}/user-config.yml" ]; then
-            # Copy config back to location
-            cp -f "${BACKUPDIR}/user-config.yml" "${USER_CONFIG_FILE}"
-            dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
-              --msgbox "Restore complete" 0 0
+            CONFIG_VERSION="$(readConfigKey "arc.version" "${BACKUPDIR}/user-config.yml")"
+            if [ "${ARC_VERSION}" = "${CONFIG_VERSION}" ]; then
+              # Copy config back to location
+              cp -f "${BACKUPDIR}/user-config.yml" "${USER_CONFIG_FILE}"
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore complete" 0 0
+            else
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore Version mismatch!" 0 0
+              return 1
+            fi
           else
             dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
               --msgbox "No Config Backup found" 0 0
+            return 1
           fi
           MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
           PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
@@ -1255,9 +1263,25 @@ function backupMenu() {
             [ ${#GENHASH} -eq 9 ] && break
             dialog --backtitle "$(backtitle)" --title "Restore with Code" --msgbox "Invalid Code" 0 0
           done
-          rm -f "${TMP_PATH}/user-config.yml"
-          curl -k https://dpaste.com/${GENHASH}.txt >"${TMP_PATH}/user-config.yml"
-          cp -f "${TMP_PATH}/user-config.yml" "${USER_CONFIG_FILE}"
+          rm -f "${BACKUPDIR}/user-config.yml"
+          curl -k https://dpaste.com/${GENHASH}.txt >"${BACKUPDIR}/user-config.yml"
+          if [ -f "${BACKUPDIR}/user-config.yml" ]; then
+            CONFIG_VERSION="$(readConfigKey "arc.version" "${BACKUPDIR}/user-config.yml")"
+            if [ "${ARC_VERSION}" = "${CONFIG_VERSION}" ]; then
+              # Copy config back to location
+              cp -f "${BACKUPDIR}/user-config.yml" "${USER_CONFIG_FILE}"
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore complete" 0 0
+            else
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore Version mismatch!" 0 0
+              return 1
+            fi
+          else
+            dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+              --msgbox "No Config Backup found" 0 0
+            return 1
+          fi
           MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
           PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
           ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
@@ -1344,13 +1368,21 @@ function backupMenu() {
           dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
             --infobox "Restore Config from ${BACKUPDIR}" 0 0
           if [ -f "${BACKUPDIR}/user-config.yml" ]; then
-            # Copy config back to location
-            cp -f "${BACKUPDIR}/user-config.yml" "${USER_CONFIG_FILE}"
-            dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
-              --msgbox "Restore complete" 0 0
+            CONFIG_VERSION="$(readConfigKey "arc.version" "${BACKUPDIR}/user-config.yml")"
+            if [ "${ARC_VERSION}" = "${CONFIG_VERSION}" ]; then
+              # Copy config back to location
+              cp -f "${BACKUPDIR}/user-config.yml" "${USER_CONFIG_FILE}"
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore complete" 0 0
+            else
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore Version mismatch!" 0 0
+              return 1
+            fi
           else
             dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
               --msgbox "No Config Backup found" 0 0
+            return 1
           fi
           MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
           PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
@@ -1420,9 +1452,25 @@ function backupMenu() {
             [ ${#GENHASH} -eq 9 ] && break
             dialog --backtitle "$(backtitle)" --title "Restore with Code" --msgbox "Invalid Code" 0 0
           done
-          rm -f "${TMP_PATH}/user-config.yml"
-          curl -k https://dpaste.com/${GENHASH}.txt >${TMP_PATH}/user-config.yml
-          cp -f "${TMP_PATH}/user-config.yml" "${USER_CONFIG_FILE}"
+          rm -f "${BACKUPDIR}/user-config.yml"
+          curl -k https://dpaste.com/${GENHASH}.txt >"${BACKUPDIR}/user-config.yml"
+          if [ -f "${BACKUPDIR}/user-config.yml" ]; then
+            CONFIG_VERSION="$(readConfigKey "arc.version" "${BACKUPDIR}/user-config.yml")"
+            if [ "${ARC_VERSION}" = "${CONFIG_VERSION}" ]; then
+              # Copy config back to location
+              cp -f "${BACKUPDIR}/user-config.yml" "${USER_CONFIG_FILE}"
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore complete" 0 0
+            else
+              dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+                --msgbox "Restore Version mismatch!" 0 0
+              return 1
+            fi
+          else
+            dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
+              --msgbox "No Config Backup found" 0 0
+            return 1
+          fi
           MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
           PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
           ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
@@ -2359,12 +2407,55 @@ function formatdisks() {
 
 ###############################################################################
 # let user delete Loader Boot Files
-function cleanOld() {
+function resetLoader() {
   if [ -f "${ORI_ZIMAGE_FILE}" ] || [ -f "${ORI_RDGZ_FILE}" ] || [ -f "${MOD_ZIMAGE_FILE}" ] || [ -f "${MOD_RDGZ_FILE}" ]; then
-    # Delete old files
-    rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}"
+    # Clean old files
+    rm -f "${ORI_ZIMAGE_FILE}" "${ORI_RDGZ_FILE}" "${MOD_ZIMAGE_FILE}" "${MOD_RDGZ_FILE}" "${USER_CONFIG_FILE}"
+    rm -rf "${UNTAR_PAT_PATH}"
+    rm -rf "${CACHE_PATH}/${MODEL}"
   fi
-  writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+  if [ ! -f "${USER_CONFIG_FILE}" ]; then
+    touch "${USER_CONFIG_FILE}"
+    writeConfigKey "lkm" "prod" "${USER_CONFIG_FILE}"
+    writeConfigKey "model" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "productver" "" "${USER_CONFIG_FILE}"
+    # writeConfigKey "maxdisks" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "layout" "qwertz" "${USER_CONFIG_FILE}"
+    writeConfigKey "keymap" "de" "${USER_CONFIG_FILE}"
+    writeConfigKey "zimage-hash" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "ramdisk-hash" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "cmdline" "{}" "${USER_CONFIG_FILE}"
+    writeConfigKey "synoinfo" "{}" "${USER_CONFIG_FILE}"
+    writeConfigKey "addons" "{}" "${USER_CONFIG_FILE}"
+    writeConfigKey "addons.acpid" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "addons.wol" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "extensions" "{}" "${USER_CONFIG_FILE}"
+    writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc" "{}" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.confdone" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.paturl" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.pathash" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.sn" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.mac1" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.staticip" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.directboot" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.usbmount" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.pathash" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.paturl" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.bootipwait" "20" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.bootwait" "5" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.kernelload" "power" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.kernelpanic" "5" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.macsys" "hardware" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.bootcount" "0" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.odp" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.version" "${ARC_VERSION}" "${USER_CONFIG_FILE}"
+    writeConfigKey "device" "{}" "${USER_CONFIG_FILE}"
+  fi
+  CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
   BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --colors --title "Clean Old" \
     --msgbox "Clean is complete." 5 30
@@ -2488,7 +2579,7 @@ while true; do
     echo "= \"\Z4========== Dev ==========\Zn \" "                                          >>"${TMP_PATH}/menu"
     echo "v \"Save Modifications to Disk \" "                                               >>"${TMP_PATH}/menu"
     echo "n \"Edit Grub Config \" "                                                         >>"${TMP_PATH}/menu"
-    echo "w \"Clean old Boot Files \" "                                                     >>"${TMP_PATH}/menu"
+    echo "w \"Reset Loader \" "                                                             >>"${TMP_PATH}/menu"
     echo "+ \"\Z1Format Disk(s)\Zn \" "                                                     >>"${TMP_PATH}/menu"
     echo "= \"\Z4=========================\Zn \" "                                          >>"${TMP_PATH}/menu"
   fi
@@ -2583,7 +2674,7 @@ while true; do
       ;;
     v) saveMenu; NEXT="v" ;;
     n) editGrubCfg; NEXT="n" ;;
-    w) cleanOld; NEXT="w" ;;
+    w) resetLoader; NEXT="w" ;;
     +) formatdisks; NEXT="+" ;;
     # Loader Settings
     x) backupMenu; NEXT="t" ;;
