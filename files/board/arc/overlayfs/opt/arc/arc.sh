@@ -81,10 +81,12 @@ function backtitle() {
     BACKTITLE+=" (no IP)"
   fi
   BACKTITLE+=" |"
-  if [ "${ARCPATCH}" = "true" ]; then
-    BACKTITLE+=" Patch: Y"
-  else
-    BACKTITLE+=" Patch: N"
+  if [ "${ARCPATCH}" = "arc" ]; then
+    BACKTITLE+=" Patch: A"
+  elif [ "${ARCPATCH}" = "random" ]; then
+    BACKTITLE+=" Patch: R"
+  elif [ "${ARCPATCH}" = "user" ]; then
+    BACKTITLE+=" Patch: U"
   fi
   BACKTITLE+=" |"
   if [ "${CONFDONE}" = "true" ]; then
@@ -281,71 +283,91 @@ function arcsettings() {
   MODEL="$(readConfigKey "model" "${USER_CONFIG_FILE}")"
   DT="$(readModelKey "${MODEL}" "dt")"
   ARCCONF="$(readConfigKey "arc.serial" "${MODEL_CONFIG_PATH}/${MODEL}.yml")"
-  if [ -n "${ARCCONF}" ]; then
-    if [ "${ARCRECOVERY}" != "true" ]; then
-      dialog --clear --backtitle "$(backtitle)" \
-        --menu "Arc Patch\nDo you want to use Syno Services?\nIf NO, you can add your own Serial/Mac" 0 0 0 \
-        1 "Yes - Install with Arc Patch" \
-        2 "No - Install without Arc Patch" \
-      2>"${TMP_PATH}/resp"
-      resp="$(<"${TMP_PATH}/resp")"
-      [ -z "${resp}" ] && return 1
-      if [ ${resp} -eq 1 ]; then
-        # read valid serial from file
-        SN="$(readModelKey "${MODEL}" "arc.serial")"
-        writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
-        writeConfigKey "arc.patch" "true" "${USER_CONFIG_FILE}"
-        writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-      elif [ ${resp} -eq 2 ]; then
-        # Generate random serial
-        SN="$(generateSerial "${MODEL}")"
-        writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
-        writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
-        writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-      fi
-    elif [ "${ARCRECOVERY}" = "true" ]; then
+  if [ "${ARCRECOVERY}" = "true" ]; then
+    writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
+  elif [ "${ARCRECOVERY}" != "true" ] && [ -n "${ARCCONF}" ]; then
+    dialog --clear --backtitle "$(backtitle)" --title "Arc Patch Model"\
+      --menu "Do you want to use Syno Services?" 7 50 0 \
+      1 "Yes - Install with Arc Patch" \
+      2 "No - Install with random Serial/Mac" \
+      3 "No - Install with my Serial/Mac" \
+    2>"${TMP_PATH}/resp"
+    resp="$(<"${TMP_PATH}/resp")"
+    [ -z "${resp}" ] && return 1
+    if [ ${resp} -eq 1 ]; then
+      # Read Arc Patch from File
+      SN="$(readModelKey "${MODEL}" "arc.serial")"
+      writeConfigKey "arc.patch" "arc" "${USER_CONFIG_FILE}"
+      writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
+    elif [ ${resp} -eq 2 ]; then
+      # Generate random Serial
+      SN="$(generateSerial "${MODEL}")"
+      writeConfigKey "arc.patch" "random" "${USER_CONFIG_FILE}"
+      writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
+    elif [ ${resp} -eq 3 ]; then
+      while true; do
+        dialog --backtitle "$(backtitle)" --colors --title "Serial" \
+          --inputbox "Please enter a valid Serial " 0 0 "" \
+          2>"${TMP_PATH}/resp"
+        [ $? -ne 0 ] && break 2
+        SN="$(cat ${TMP_PATH}/resp)"
+        if [ -z "${SN}" ]; then
+          return
+        elif [ $(validateSerial ${MODEL} ${SN}) -eq 1 ]; then
+          break
+        fi
+        # At present, the SN rules are not complete, and many SNs are not truly invalid, so not provide tips now.
+        break
+        dialog --backtitle "$(backtitle)" --colors --title "Serial" \
+          --yesno "Invalid Serial, continue?" 0 0
+        [ $? -eq 0 ] && break
+      done
+      writeConfigKey "arc.patch" "user" "${USER_CONFIG_FILE}"
       writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
     fi
-  else
-    if [ "${ARCRECOVERY}" != "true" ]; then
-      dialog --clear --backtitle "$(backtitle)" \
-        --menu "DSM Serial\nDo you want set your own?" 0 0 0 \
-        1 "Yes - Set my Serial" \
-        2 "No - Generate Random Serial" \
-      2>"${TMP_PATH}/resp"
-      resp="$(<"${TMP_PATH}/resp")"
-      [ -z "${resp}" ] && return 1
-      if [ ${resp} -eq 1 ]; then
-        while true; do
-          dialog --backtitle "$(backtitle)" --colors --title "Cmdline" \
-            --inputbox "Please enter a serial number " 0 0 "" \
-            2>"${TMP_PATH}/resp"
-          [ $? -ne 0 ] && break 2
-          SN="$(cat ${TMP_PATH}/resp)"
-          if [ -z "${SN}" ]; then
-            return
-          elif [ $(validateSerial ${MODEL} ${SN}) -eq 1 ]; then
-            break
-          fi
-          # At present, the SN rules are not complete, and many SNs are not truly invalid, so not provide tips now.
+    writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
+  elif [ "${ARCRECOVERY}" != "true" ] && [ -z "${ARCCONF}" ]; then
+    dialog --clear --backtitle "$(backtitle)" --title "Non Arc Patch Model" \
+      --menu "Please select an Option?" 7 50 0 \
+      1 "Install with random Serial/Mac" \
+      2 "Install with my Serial/Mac" \
+    2>"${TMP_PATH}/resp"
+    resp="$(<"${TMP_PATH}/resp")"
+    [ -z "${resp}" ] && return 1
+    if [ ${resp} -eq 1 ]; then
+      # Generate random Serial
+      SN="$(generateSerial "${MODEL}")"
+      writeConfigKey "arc.patch" "random" "${USER_CONFIG_FILE}"
+      writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
+    elif [ ${resp} -eq 2 ]; then
+      while true; do
+        dialog --backtitle "$(backtitle)" --colors --title "Serial" \
+          --inputbox "Please enter a serial number " 0 0 "" \
+          2>"${TMP_PATH}/resp"
+        [ $? -ne 0 ] && break 2
+        SN="$(cat ${TMP_PATH}/resp)"
+        if [ -z "${SN}" ]; then
+          return
+        elif [ $(validateSerial ${MODEL} ${SN}) -eq 1 ]; then
           break
-          dialog --backtitle "$(backtitle)" --colors --title "Cmdline" \
-            --yesno "Invalid serial, continue?" 0 0
-          [ $? -eq 0 ] && break
-        done
-        writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
-      elif [ ${resp} -eq 2 ]; then
-        # Generate random serial
-        SN="$(generateSerial "${MODEL}")"
-      fi
-      writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
+        fi
+        # At present, the SN rules are not complete, and many SNs are not truly invalid, so not provide tips now.
+        break
+        dialog --backtitle "$(backtitle)" --colors --title "Serial" \
+          --yesno "Invalid Serial, continue?" 0 0
+        [ $? -eq 0 ] && break
+      done
+      writeConfigKey "arc.patch" "user" "${USER_CONFIG_FILE}"
+      writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
     fi
-    writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
-    writeConfigKey "extensions.cpuinfo" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
   fi
   ARCPATCH="$(readConfigKey "arc.patch" "${USER_CONFIG_FILE}")"
   # Get Network Config for Loader
   getnet
+  if [ "${ONLYPATCH}" = "true" ]; then
+    return 1
+  fi
   # Get Portmap for Loader
   getmap
   # Check Warnings
@@ -355,7 +377,7 @@ function arcsettings() {
   fi
   if [ ${WARNON} -eq 2 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
-      --msgbox "WARN: You have selected a DT Model. There is no support for Raid/SCSI Controller." 0 0
+      --msgbox "WARN: You have selected a DT Model. There is no support for SAS Controller." 0 0
   fi
   if [ ${WARNON} -eq 3 ]; then
     dialog --backtitle "$(backtitle)" --title "Arc Warning" \
@@ -437,19 +459,18 @@ function make() {
       idx=$((${idx} + 1))
     done
     if [ -z "${PAT_URL}" ] || [ -z "${PAT_HASH}" ]; then
-      MSG="Failed to get PAT Data,\nPlease manually fill in the URL and Hash of PAT."
+      MSG="Failed to get PAT Data.\nPlease manually fill in the URL and Hash of PAT."
       PAT_URL=""
       PAT_HASH=""
     else
-      MSG="Successfully to got PAT Data,\nPlease confirm or modify as needed."
+      MSG="Successfully got PAT Data.\nPlease confirm or modify as needed."
     fi
     dialog --backtitle "$(backtitle)" --colors --title "Arc Build" \
-      --extra-button --extra-label "Retry" \
+      --extra-button --extra-label "Retry" --default-button "OK" \
       --form "${MSG}" 10 110 2 "URL" 1 1 "${PAT_URL}" 1 7 100 0 "HASH" 2 1 "${PAT_HASH}" 2 7 100 0 \
       2>"${TMP_PATH}/resp"
     RET=$?
     [ ${RET} -eq 0 ] && break    # ok-button
-    [ ${RET} -eq 3 ] && continue # extra-button
     return                       # 1 or 255  # cancel-button or ESC
   done
   PAT_URL="$(cat "${TMP_PATH}/resp" | sed -n '1p')"
@@ -1181,8 +1202,7 @@ function backupMenu() {
                 --msgbox "Restore complete" 0 0
             else
               dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
-                --msgbox "Restore Version mismatch!" 0 0
-              return 1
+                --msgbox "Restore Version mismatch!\nIt is possible that your Config will not work!" 0 0
             fi
           else
             dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
@@ -1311,8 +1331,7 @@ function backupMenu() {
                 --msgbox "Restore complete" 0 0
             else
               dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
-                --msgbox "Restore Version mismatch!" 0 0
-              return 1
+                --msgbox "Restore Version mismatch!\nIt is possible that your Config will not work!" 0 0
             fi
           else
             dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
@@ -1413,8 +1432,7 @@ function backupMenu() {
                 --msgbox "Restore complete" 0 0
             else
               dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
-                --msgbox "Restore Version mismatch!" 0 0
-              return 1
+                  --msgbox "Restore Version mismatch!\nIt is possible that your Config will not work!" 0 0
             fi
           else
             dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
@@ -1500,8 +1518,7 @@ function backupMenu() {
                 --msgbox "Restore complete" 0 0
             else
               dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
-                --msgbox "Restore Version mismatch!" 0 0
-              return 1
+                  --msgbox "Restore Version mismatch!\nIt is possible that your Config will not work!" 0 0
             fi
           else
             dialog --backtitle "$(backtitle)" --title "Restore Config" --aspect 18 \
@@ -2119,7 +2136,7 @@ function sysinfo() {
   TEXT+="\n   Kernel | LKM: \Zb${KVER} | ${LKM}\Zn"
   TEXT+="\n   Platform | DeviceTree: \Zb${PLATFORM} | ${DT}\Zn"
   TEXT+="\n\Z4>> Loader\Zn"
-  TEXT+="\n   Arcpatch | Kernelload: \Zb${ARCPATCH} | ${KERNELLOAD}\Zn"
+  TEXT+="\n   Arc Settings | Kernelload: \Zb${ARCPATCH} | ${KERNELLOAD}\Zn"
   TEXT+="\n   Directboot: \Zb${DIRECTBOOT}\Zn"
   TEXT+="\n   Config | Build: \Zb${CONFDONE} | ${BUILDDONE}\Zn"
   TEXT+="\n   MacSys: \Zb${MACSYS}\Zn"
@@ -2479,7 +2496,7 @@ function resetLoader() {
     writeConfigKey "arc.directboot" "false" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.remap" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.usbmount" "false" "${USER_CONFIG_FILE}"
-    writeConfigKey "arc.patch" "false" "${USER_CONFIG_FILE}"
+    writeConfigKey "arc.patch" "random" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.pathash" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.paturl" "" "${USER_CONFIG_FILE}"
     writeConfigKey "arc.bootipwait" "20" "${USER_CONFIG_FILE}"
@@ -2554,6 +2571,7 @@ while true; do
     if [ "${ARCOPTS}" = "true" ]; then
       echo "= \"\Z4========== Arc ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "e \"DSM Version \" "                                                            >>"${TMP_PATH}/menu"
+      echo "p \"Arc Settings \" "                                                           >>"${TMP_PATH}/menu"
       echo "f \"Network Config \" "                                                         >>"${TMP_PATH}/menu"
       echo "g \"Storage Map \" "                                                            >>"${TMP_PATH}/menu"
       if [ "${DT}" = "false" ]; then
@@ -2627,7 +2645,7 @@ while true; do
   echo "0 \"\Z1Exit\Zn \" "                                                                 >>"${TMP_PATH}/menu"
 
   dialog --clear --default-item ${NEXT} --backtitle "$(backtitle)" --colors \
-    --menu "Choose an Option" 0 0 0 --file "${TMP_PATH}/menu" \
+    --title "Arc Menu" --menu "" 0 0 0 --file "${TMP_PATH}/menu" \
     2>"${TMP_PATH}/resp"
   [ $? -ne 0 ] && break
   case $(<"${TMP_PATH}/resp") in
@@ -2647,6 +2665,7 @@ while true; do
        NEXT="5"
        ;;
     e) ONLYVERSION="true" && arcbuild; NEXT="e" ;;
+    p) ONLYPATCH="true" && arcsettings; NEXT="p" ;;
     f) networkMenu; NEXT="f" ;;
     g) storageMenu; NEXT="g" ;;
     h) usbMenu; NEXT="h" ;;
