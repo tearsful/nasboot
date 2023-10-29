@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-. /opt/arc/include/functions.sh
-. /opt/arc/include/addons.sh
-. /opt/arc/include/extensions.sh
+[ -z "${ARC_PATH}" ] || [ ! -d "${ARC_PATH}/include" ] && ARC_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+. ${ARC_PATH}/include/functions.sh
 
 set -o pipefail # Get exit code from process piped
 
@@ -13,11 +13,6 @@ echo -e "Patching Ramdisk"
 
 # Remove old rd.gz patched
 rm -f "${MOD_RDGZ_FILE}"
-
-# Check disk space left
-LOADER_DISK="$(blkid | grep 'LABEL="ARC3"' | cut -d3 -f1)"
-LOADER_DEVICE_NAME=$(echo ${LOADER_DISK} | sed 's|/dev/||')
-SPACELEFT=$(df --block-size=1 | awk '/'${LOADER_DEVICE_NAME}'3/{print$4}')
 
 # Unzipping ramdisk
 rm -rf "${RAMDISK_PATH}" # Force clean
@@ -33,9 +28,9 @@ LKM="$(readConfigKey "lkm" "${USER_CONFIG_FILE}")"
 SN="$(readConfigKey "sn" "${USER_CONFIG_FILE}")"
 LAYOUT="$(readConfigKey "layout" "${USER_CONFIG_FILE}")"
 KEYMAP="$(readConfigKey "keymap" "${USER_CONFIG_FILE}")"
-UNIQUE=$(readModelKey "${MODEL}" "unique")
 PLATFORM="$(readModelKey "${MODEL}" "platform")"
 ODP="$(readConfigKey "arc.odp" "${USER_CONFIG_FILE}")"
+HDDSORT="$(readConfigKey "arc.hddsort" "${USER_CONFIG_FILE}")"
 
 # Check if DSM Version changed
 . "${RAMDISK_PATH}/etc/VERSION"
@@ -139,11 +134,10 @@ cp -f "${PATCH_PATH}/iosched-trampoline.sh" "${RAMDISK_PATH}/usr/sbin/modprobe"
 # Copying LKM to /usr/lib/modules
 gzip -dc "${LKM_PATH}/rp-${PLATFORM}-${KVER}-${LKM}.ko.gz" >"${RAMDISK_PATH}/usr/lib/modules/rp.ko"
 
-# Addons
-#MAXDISKS=$(readConfigKey "maxdisks" "${USER_CONFIG_FILE}")
 # Check if model needs Device-tree dynamic patch
-DT="$(readModelKey "${MODEL}" "dt")"
+# DT="$(readModelKey "${MODEL}" "dt")"
 
+# Addons
 mkdir -p "${RAMDISK_PATH}/addons"
 echo "#!/bin/sh" >"${RAMDISK_PATH}/addons/addons.sh"
 echo 'echo "addons.sh called with params ${@}"' >>"${RAMDISK_PATH}/addons/addons.sh"
@@ -155,11 +149,16 @@ echo "export LAYOUT=${LAYOUT}" >>"${RAMDISK_PATH}/addons/addons.sh"
 echo "export KEYMAP=${KEYMAP}" >>"${RAMDISK_PATH}/addons/addons.sh"
 chmod +x "${RAMDISK_PATH}/addons/addons.sh"
 
+# Required addons: restore
+installAddon revert
+echo "/addons/revert.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
+
 # Install System Addons
 installAddon eudev
 echo "/addons/eudev.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon disks
-echo "/addons/disks.sh \${1} ${DT} ${UNIQUE}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
+#echo "/addons/disks.sh \${1} ${DT}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
+echo "/addons/disks.sh \${1} ${HDDSORT}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon localrss
 echo "/addons/localrss.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon wol
@@ -188,7 +187,7 @@ for EXTENSION in ${!EXTENSIONS[@]}; do
 done
 
 # Build modules dependencies
-/opt/arc/depmod -a -b "${RAMDISK_PATH}" 2>/dev/null
+${ARC_PATH}/depmod -a -b "${RAMDISK_PATH}" 2>/dev/null
 
 # Network card configuration file
 for N in $(seq 0 7); do

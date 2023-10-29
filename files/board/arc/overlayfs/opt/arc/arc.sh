@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
-. /opt/arc/include/functions.sh
-. /opt/arc/include/addons.sh
-. /opt/arc/include/extensions.sh
-. /opt/arc/include/modules.sh
-. /opt/arc/include/storage.sh
-. /opt/arc/include/network.sh
+[ -z "${ARC_PATH}" ] || [ ! -d "${ARC_PATH}/include" ] && ARC_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-LOADER_DISK="$(blkid | grep 'LABEL="ARC3"' | cut -d3 -f1)"
-LOADER_DEVICE_NAME=$(echo "${LOADER_DISK}" | sed 's|/dev/||')
-BUS=$(udevadm info --query property --name "${LOADER_DISK}" | grep ID_BUS | cut -d= -f2)
-[ "${BUS}" = "ata" ] && BUS="sata"
+. ${ARC_PATH}/include/functions.sh
+. ${ARC_PATH}/include/addons.sh
+. ${ARC_PATH}/include/extensions.sh
+. ${ARC_PATH}/include/modules.sh
+. ${ARC_PATH}/include/storage.sh
+. ${ARC_PATH}/include/network.sh
 
 # Memory: Check Memory installed
 RAMTOTAL=0
@@ -57,6 +54,7 @@ KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
 KERNELPANIC="$(readConfigKey "arc.kernelpanic" "${USER_CONFIG_FILE}")"
 MACSYS="$(readConfigKey "arc.macsys" "${USER_CONFIG_FILE}")"
 ODP="$(readConfigKey "arc.odp" "${USER_CONFIG_FILE}")"
+HDDSORT="$(readConfigKey "arc.hddsort" "${USER_CONFIG_FILE}")"
 STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
 
 ###############################################################################
@@ -101,7 +99,7 @@ function backtitle() {
     BACKTITLE+=" Build: N"
   fi
   BACKTITLE+=" |"
-  BACKTITLE+=" ${MACHINE}(${BUS})"
+  BACKTITLE+=" ${MACHINE}"
   echo "${BACKTITLE}"
 }
 
@@ -535,11 +533,11 @@ function make() {
     fi
     # Copy DSM Files to Locations if DSM Files not found
     cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${BOOTLOADER_PATH}"
-    cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${BOOTLOADER_PATH}"
+    cp -f "${UNTAR_PAT_PATH}/GRUB_VER" "${BOOTLOADER_PATH}"
     cp -f "${UNTAR_PAT_PATH}/grub_cksum.syno" "${SLPART_PATH}"
-    cp -f "${UNTAR_PAT_PATH}/GRUB_VER"        "${SLPART_PATH}"
-    cp -f "${UNTAR_PAT_PATH}/zImage"          "${ORI_ZIMAGE_FILE}"
-    cp -f "${UNTAR_PAT_PATH}/rd.gz"           "${ORI_RDGZ_FILE}"
+    cp -f "${UNTAR_PAT_PATH}/GRUB_VER" "${SLPART_PATH}"
+    cp -f "${UNTAR_PAT_PATH}/zImage" "${ORI_ZIMAGE_FILE}"
+    cp -f "${UNTAR_PAT_PATH}/rd.gz" "${ORI_RDGZ_FILE}"
     rm -rf "${UNTAR_PAT_PATH}"
   fi
   # Reset Bootcount if User rebuild DSM
@@ -851,9 +849,10 @@ function cmdlineMenu() {
   echo "4 \"RAM Fix\""                                          >>"${TMP_PATH}/menu"
   echo "5 \"Apparmor Fix\""                                     >>"${TMP_PATH}/menu"
   echo "6 \"PCI/IRQ Fix\""                                      >>"${TMP_PATH}/menu"
-  echo "7 \"Show user Cmdline\""                                >>"${TMP_PATH}/menu"
-  echo "8 \"Show Model/Build Cmdline\""                         >>"${TMP_PATH}/menu"
-  echo "9 \"Kernelpanic Behavior\""                             >>"${TMP_PATH}/menu"
+  echo "7 \"C-State Fix\""                                      >>"${TMP_PATH}/menu"
+  echo "8 \"Show user Cmdline\""                                >>"${TMP_PATH}/menu"
+  echo "9 \"Show Model/Build Cmdline\""                         >>"${TMP_PATH}/menu"
+  echo "0 \"Kernelpanic Behavior\""                             >>"${TMP_PATH}/menu"
   # Loop menu
   while true; do
     dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
@@ -931,7 +930,7 @@ function cmdlineMenu() {
         [ -z "${resp}" ] && return 1
         if [ ${resp} -eq 1 ]; then
           writeConfigKey "cmdline.disable_mtrr_trim" "0" "${USER_CONFIG_FILE}"
-          writeConfigKey "cmdline.crashkernel" "192M" "${USER_CONFIG_FILE}"
+          writeConfigKey "cmdline.crashkernel" "auto" "${USER_CONFIG_FILE}"
           dialog --backtitle "$(backtitle)" --title "RAM Fix" \
             --aspect 18 --msgbox "Fix installed to Cmdline" 0 0
         elif [ ${resp} -eq 2 ]; then
@@ -984,6 +983,26 @@ function cmdlineMenu() {
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
       7)
+        dialog --clear --backtitle "$(backtitle)" \
+          --title "C-State Fix" --menu "Fix?" 0 0 0 \
+          1 "Install" \
+          2 "Uninnstall" \
+        2>"${TMP_PATH}/resp"
+        resp="$(<"${TMP_PATH}/resp")"
+        [ -z "${resp}" ] && return 1
+        if [ ${resp} -eq 1 ]; then
+          writeConfigKey "cmdline.intel_idle.max_cstate" "1" "${USER_CONFIG_FILE}"
+          dialog --backtitle "$(backtitle)" --title "C-State Fix" \
+            --aspect 18 --msgbox "Fix installed to Cmdline" 0 0
+        elif [ ${resp} -eq 2 ]; then
+          deleteConfigKey "cmdline.intel_idle.max_cstate" "${USER_CONFIG_FILE}"
+          dialog --backtitle "$(backtitle)" --title "C-State Fix" \
+            --aspect 18 --msgbox "Fix uninstalled from Cmdline" 0 0
+        fi
+        writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+        BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+        ;;
+      8)
         ITEMS=""
         for KEY in ${!CMDLINE[@]}; do
           ITEMS+="${KEY}: ${CMDLINE[$KEY]}\n"
@@ -991,7 +1010,7 @@ function cmdlineMenu() {
         dialog --backtitle "$(backtitle)" --title "User cmdline" \
           --aspect 18 --msgbox "${ITEMS}" 0 0
         ;;
-      8)
+      9)
         ITEMS=""
         while IFS=': ' read -r KEY VALUE; do
           ITEMS+="${KEY}: ${VALUE}\n"
@@ -999,7 +1018,7 @@ function cmdlineMenu() {
         dialog --backtitle "$(backtitle)" --title "Model/Version cmdline" \
           --aspect 18 --msgbox "${ITEMS}" 0 0
         ;;
-      9)
+      0)
         rm -f "${TMP_PATH}/opts"
         echo "5 \"Reboot after 5 seconds\"" >>"${TMP_PATH}/opts"
         echo "0 \"No reboot\"" >>"${TMP_PATH}/opts"
@@ -1274,14 +1293,14 @@ function backupMenu() {
             break
           done
           popd
-          if [ -z "${IFTOOL}" ] || [ -z "${TMP_PATH}/${USER_FILE}" ]; then
+          if [ -z "${IFTOOL}" ] || [ ! -f "${TMP_PATH}/${USER_FILE}" ]; then
             dialog --backtitle "$(backtitle)" --title "Restore Loader disk" --aspect 18 \
               --msgbox "Not a valid .zip/.img.gz file, please try again!\n${USER_FILE}" 0 0
           else
             dialog --backtitle "$(backtitle)" --title "Restore Loader disk" \
                 --yesno "Warning:\nDo not terminate midway, otherwise it may cause damage to the Loader. Do you want to continue?" 0 0
             [ $? -ne 0 ] && (
-              rm -f "${LOADER_DISK}"
+              rm -f "${TMP_UP_PATH}/${USER_FILE}"
               return 1
             )
             dialog --backtitle "$(backtitle)" --title "Restore Loader disk" --aspect 18 \
@@ -2078,6 +2097,7 @@ function sysinfo() {
   LKM="$(readConfigKey "lkm" "${USER_CONFIG_FILE}")"
   KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
   MACSYS="$(readConfigKey "arc.macsys" "${USER_CONFIG_FILE}")"
+  HDDSORT="$(readConfigKey "arc.hddsort" "${USER_CONFIG_FILE}")"
   MODULESINFO="$(lsmod | awk -F' ' '{print $1}' | grep -v 'Module')"
   MODULESVERSION="$(cat "${MODULES_PATH}/VERSION")"
   ADDONSVERSION="$(cat "${ADDONS_PATH}/VERSION")"
@@ -2101,7 +2121,7 @@ function sysinfo() {
         TEXT+="\n  ${DRIVER}: \ZbIP: NOT CONNECTED | MAC: ${MAC}\Zn"
         break
       fi
-      NETIP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
+      NETIP="$(getIP)"
       if [ "${STATICIP}" = "true" ]; then
         ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
         if [ "${ETHX[${N}]}" = "eth0" ] && [ -n "${ARCIP}" ]; then
@@ -2160,6 +2180,7 @@ function sysinfo() {
   TEXT+="\n"
   # Check for Controller // 104=RAID // 106=SATA // 107=SAS
   TEXT+="\n\Z4> Storage\Zn"
+  TEXT+="\n  Sort Drives: \Zb${HDDSORT}\Zn"
   # Get Information for Sata Controller
   NUMPORTS=0
   if [ $(lspci -d ::106 | wc -l) -gt 0 ]; then
@@ -2225,7 +2246,7 @@ function sysinfo() {
 # allow setting Static IP for DSM
 function staticIPMenu() {
   mkdir -p "${TMP_PATH}/sdX1"
-  for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+  for I in $(ls /dev/sd.*1 2>/dev/null | grep -v "${LOADER_DISK}1"); do
     mount "${I}" "${TMP_PATH}/sdX1"
     [ -f "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0" ] && . "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0"
     umount "${I}"
@@ -2271,7 +2292,7 @@ function staticIPMenu() {
     [ $? -ne 0 ] && return 1
     (
       mkdir -p "${TMP_PATH}/sdX1"
-      for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+      for I in $(ls /dev/sd*1 2>/dev/null | grep -v "${LOADER_DISK}1"); do
         mount "${I}" "${TMP_PATH}/sdX1"
         [ -f "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0" ] && cp -f "${TMP_PATH}/ifcfg-eth0" "${TMP_PATH}/sdX1/etc/sysconfig/network-scripts/ifcfg-eth0"
         sync
@@ -2280,9 +2301,8 @@ function staticIPMenu() {
       rm -rf "${TMP_PATH}/sdX1"
     )
     if [ -n "${IPADDR}" ] && [ -n "${NETMASK}" ]; then
-      IP="${IPADDR}"
       NETMASK=$(convert_netmask "${NETMASK}")
-      ip addr add ${IP}/${NETMASK} dev eth0
+      ip addr add ${IPADDR}/${NETMASK} dev eth0
       writeConfigKey "arc.staticip" "true" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.ip" "${IPADDR}" "${USER_CONFIG_FILE}"
       writeConfigKey "arc.netmask" "${NETMASK}" "${USER_CONFIG_FILE}"
@@ -2309,7 +2329,7 @@ function downgradeMenu() {
   [ $? -ne 0 ] && return 1
   (
     mkdir -p "${TMP_PATH}/sdX1"
-    for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+    for I in $(ls /dev/sd*1 2>/dev/null | grep -v "${LOADER_DISK}1"); do
       mount "${I}" "${TMP_PATH}/sdX1"
       [ -f "${TMP_PATH}/sdX1/etc/VERSION" ] && rm -f "${TMP_PATH}/sdX1/etc/VERSION"
       [ -f "${TMP_PATH}/sdX1/etc.defaults/VERSION" ] && rm -f "${TMP_PATH}/sdX1/etc.defaults/VERSION"
@@ -2364,7 +2384,7 @@ function resetPassword() {
   NEWPASSWD="$(python -c "import crypt,getpass;pw=\"${VALUE}\";print(crypt.crypt(pw))")"
   (
     mkdir -p "${TMP_PATH}/sdX1"
-    for I in $(ls /dev/sd*1 2>/dev/null | grep -v ${LOADER_DISK}1); do
+    for I in $(ls /dev/sd*1 2>/dev/null | grep -v "${LOADER_DISK}1"); do
       mount "${I}" "${TMP_PATH}/sdX1"
       sed -i "s|${OLDPASSWD}|${NEWPASSWD}|g" "${TMP_PATH}/sdX1/etc/shadow"
       sync
@@ -2577,6 +2597,7 @@ while true; do
       if [ "${DT}" = "false" ]; then
         echo "h \"USB Port Config \" "                                                      >>"${TMP_PATH}/menu"
       fi
+      echo ". \"DHCP/Static Loader IP \" "                                                  >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
     if [ "${ADVOPTS}" = "true" ]; then
@@ -2618,8 +2639,8 @@ while true; do
       echo "= \"\Z4========== DSM ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "s \"Allow DSM Downgrade \" "                                                    >>"${TMP_PATH}/menu"
       echo "t \"Change DSM Password \" "                                                    >>"${TMP_PATH}/menu"
-      echo ". \"DHCP/Static IP Settings \" "                                                >>"${TMP_PATH}/menu"
       echo ", \"Official Driver Priority: \Z4${ODP}\Zn \" "                                 >>"${TMP_PATH}/menu"
+      echo "/ \"Sort Drives: \Z4${HDDSORT}\Zn \" "                                          >>"${TMP_PATH}/menu"
       echo "o \"Switch MacSys: \Z4${MACSYS}\Zn \" "                                         >>"${TMP_PATH}/menu"
       echo "u \"Switch LKM version: \Z4${LKM}\Zn \" "                                       >>"${TMP_PATH}/menu"
       echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
@@ -2669,6 +2690,7 @@ while true; do
     f) networkMenu; NEXT="f" ;;
     g) storageMenu; NEXT="g" ;;
     h) usbMenu; NEXT="h" ;;
+    .) staticIPMenu; NEXT="." ;;
     # Advanced Section
     6) [ "${ADVOPTS}" = "true" ] && ADVOPTS='false' || ADVOPTS='true'
        ADVOPTS="${ADVOPTS}"
@@ -2706,10 +2728,18 @@ while true; do
       ;;
     s) downgradeMenu; NEXT="s" ;;
     t) resetPassword; NEXT="t" ;;
-    .) staticIPMenu; NEXT="." ;;
     ,)
       [ "${ODP}" = "false" ] && ODP='true' || ODP='false'
       writeConfigKey "arc.odp" "${ODP}" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+      BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+      ;;
+    /)
+      [ "${HDDSORT}" = "true" ] && HDDSORT='false' || HDDSORT='true'
+      writeConfigKey "arc.hddsort" "${HDDSORT}" "${USER_CONFIG_FILE}"
+      writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
+      BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
+      NEXT="/"
       ;;
     o) [ "${MACSYS}" = "hardware" ] && MACSYS='custom' || MACSYS='hardware'
       writeConfigKey "arc.macsys" "${MACSYS}" "${USER_CONFIG_FILE}"

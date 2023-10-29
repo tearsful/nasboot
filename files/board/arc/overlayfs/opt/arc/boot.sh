@@ -1,12 +1,20 @@
 #0!/usr/bin/env bash
 
 set -e
+[ -z "${ARC_PATH}" ] || [ ! -d "${ARC_PATH}/include" ] && ARC_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-. /opt/arc/include/functions.sh
+. ${ARC_PATH}/include/functions.sh
 
-LOADER_DISK="$(blkid | grep 'LABEL="ARC3"' | cut -d3 -f1)"
-BUS=$(udevadm info --query property --name "${LOADER_DISK}" | grep ID_BUS | cut -d= -f2)
-[ "${BUS}" = "ata" ] && BUS="sata"
+# Wait kernel enumerate the disks
+CNT=3
+while true; do
+  [ ${CNT} -eq 0 ] && break
+  LOADER_DISK="$(blkid | grep 'LABEL="ARC3"' | cut -d3 -f1)"
+  [ -n "${LOADER_DISK}" ] && break
+  CNT=$((${CNT} - 1))
+  sleep 1
+done
+BUS=$(getBus "${LOADER_DISK}")
 
 # Check if machine has EFI
 [ -d /sys/firmware/efi ] && EFI=1 || EFI=0
@@ -73,6 +81,16 @@ if [ ! -f "${MODEL_CONFIG_PATH}/${MODEL}.yml" ] || [ -z "$(readModelKey "${MODEL
   exit 1
 fi
 
+HASATA=0
+for D in $(lsblk -dpno NAME); do
+  [ "${D}" = "${LOADER_DISK}" ] && continue
+  if [ "$(getBus "${D}")" = "sata" ] || [ "$(getBus "${D}")" = "scsi" ]; then
+    HASATA=1
+    break
+  fi
+done
+[ ${HASATA} = "0" ] && echo -e "\033[1;33m*** Please insert at least one sata/scsi disk for system installation, except for the bootloader disk. ***\033[0m"
+
 # Read necessary variables
 VID="$(readConfigKey "vid" "${USER_CONFIG_FILE}")"
 PID="$(readConfigKey "pid" "${USER_CONFIG_FILE}")"
@@ -82,7 +100,7 @@ KERNELLOAD="$(readConfigKey "arc.kernelload" "${USER_CONFIG_FILE}")"
 KERNELPANIC="$(readConfigKey "arc.kernelpanic" "${USER_CONFIG_FILE}")"
 DIRECTBOOT="$(readConfigKey "arc.directboot" "${USER_CONFIG_FILE}")"
 BOOTCOUNT="$(readConfigKey "arc.bootcount" "${USER_CONFIG_FILE}")"
-ETHX=($(ls /sys/class/net/ | grep eth)) # real network cards list
+
 [ -z "${BOOTCOUNT}" ] && BOOTCOUNT=0
 
 declare -A CMDLINE
@@ -91,14 +109,10 @@ declare -A CMDLINE
 if grep -q "force_junior" /proc/cmdline; then
   CMDLINE['force_junior']=""
 fi
-if [ ${EFI} -eq 1 ]; then
-  CMDLINE['withefi']=""
-else
-  CMDLINE['noefi']=""
-fi
+[ ${EFI} -eq 1 ] && CMDLINE['withefi']="" || CMDLINE['noefi']=""
 if [ ! "${BUS}" = "usb" ]; then
   LOADER_DEVICE_NAME=$(echo ${LOADER_DISK} | sed 's|/dev/||')
-  SIZE=$(($(cat /sys/block/${LOADER_DEVICE_NAME}/size) / 2048 + 10))
+  SIZE=$(($(cat /sys/block/${LOADER_DISK/\/dev\//}/size) / 2048 + 10))
   # Read SATADoM type
   DOM="$(readModelKey "${MODEL}" "dom")"
   CMDLINE['synoboot_satadom']="${DOM}"
@@ -118,12 +132,9 @@ CMDLINE['loglevel']="15"
 CMDLINE['log_buf_len']="32M"
 CMDLINE['sn']="${SN}"
 CMDLINE['mac1']="${MAC1}"
+CMDLINE['net.ifnames']="0"
 CMDLINE['netif_num']="1"
-if [ "${MACSYS}" = "hardware" ]; then
-  CMDLINE['skip_vender_mac_interfaces']="0,1,2,3,4,5,6,7"
-elif [ "${MACSYS}" = "custom" ]; then
-  CMDLINE['skip_vender_mac_interfaces']="1,2,3,4,5,6,7"
-fi
+[ "${MACSYS}" = "hardware" ] && CMDLINE['skip_vender_mac_interfaces']="0,1,2,3,4,5,6,7" || CMDLINE['skip_vender_mac_interfaces']="1,2,3,4,5,6,7"
 
 # Read cmdline
 while IFS=': ' read -r KEY VALUE; do
@@ -162,7 +173,7 @@ elif [ "${DIRECTBOOT}" = "true" ] && [ ${BOOTCOUNT} -eq 0 ]; then
   echo -e "\033[1;34mDSM not installed - Reboot with Directboot\033[0m"
   exec reboot
 elif [ "${DIRECTBOOT}" = "false" ]; then
-  # Read Ip Settings
+  ETHX=($(ls /sys/class/net/ | grep eth)) # real network cards list
   STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
   BOOTIPWAIT="$(readConfigKey "arc.bootipwait" "${USER_CONFIG_FILE}")"
   echo -e "\033[1;34mDetected ${#ETHX[@]} NIC.\033[0m \033[1;37mWaiting for Connection:\033[0m"
@@ -174,7 +185,7 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
         echo -e "\r${DRIVER}: NOT CONNECTED"
         break
       fi
-      IP=$(ip route show dev ${ETHX[${N}]} 2>/dev/null | sed -n 's/.* via .* src \(.*\)  metric .*/\1/p')
+      IP="$(getIP ${ETHX[${N}]})"
       if [ "${STATICIP}" = "true" ]; then
         ARCIP="$(readConfigKey "arc.ip" "${USER_CONFIG_FILE}")"
         NETMASK="$(readConfigKey "arc.netmask" "${USER_CONFIG_FILE}")"
@@ -231,7 +242,7 @@ kexec -l "${MOD_ZIMAGE_FILE}" --initrd "${MOD_RDGZ_FILE}" --command-line="${CMDL
 echo -e "\033[1;37m"Booting DSM..."\033[0m"
 for T in $(w | grep -v "TTY" | awk -F' ' '{print $2}')
 do
-  echo -e "\n\033[1;37mThis interface will not be operational. Please use \033[1;34mhttps://finds.synology.com/ \033[1;37mto find DSM and connect.\033[0m\n" >"/dev/${T}" 2>/dev/null || true
+  echo -e "\n\033[1;37mThis interface will not be operational. Wait a few minutes.\nPlease use \033[1;34mhttp://find.synology.com/ \033[1;37mto find DSM and connect.\033[0m\n" >"/dev/${T}" 2>/dev/null || true
 done
 [ "${KERNELLOAD}" = "kexec" ] && kexec -f -e || poweroff
 exit 0
