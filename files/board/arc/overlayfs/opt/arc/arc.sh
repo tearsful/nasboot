@@ -27,6 +27,10 @@ else
   MACHINE="NATIVE"
 fi
 
+# Get Loader Disk information
+LOADER_DISK="$(blkid | grep 'LABEL="ARC3"' | cut -d3 -f1)"
+LOADER_DEVICE_NAME=$(echo "${LOADER_DISK}" | sed 's|/dev/||')
+
 # Set Warning to 0
 WARNON=0
 
@@ -244,12 +248,12 @@ function arcbuild() {
   # Delete synoinfo and reload model/build synoinfo
   writeConfigKey "synoinfo" "{}" "${USER_CONFIG_FILE}"
   while IFS=': ' read -r KEY VALUE; do
-    writeConfigKey "synoinfo.${KEY}" "${VALUE}" "${USER_CONFIG_FILE}"
+    writeConfigKey "synoinfo.\"${KEY}\"" "${VALUE}" "${USER_CONFIG_FILE}"
   done < <(readModelMap "${MODEL}" "productvers.[${PRODUCTVER}].synoinfo")
   # Rebuild modules
   writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
   while read -r ID DESC; do
-    writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "modules.\"${ID}\"" "" "${USER_CONFIG_FILE}"
   done < <(getAllModules "${PLATFORM}" "${KVER}")
   if [ "${ONLYVERSION}" != "true" ]; then
     arcsettings
@@ -387,6 +391,8 @@ function arcsettings() {
   fi
   # Select Extensions
   extensionSelection
+  # Select Fix
+  #fixSelection
   # Config is done
   writeConfigKey "arc.confdone" "true" "${USER_CONFIG_FILE}"
   CONFDONE="$(readConfigKey "arc.confdone" "${USER_CONFIG_FILE}")"
@@ -644,7 +650,7 @@ function addonSelection() {
   writeConfigKey "addons" "{}" "${USER_CONFIG_FILE}"
   for ADDON in ${resp}; do
     USERADDONS["${ADDON}"]=""
-    writeConfigKey "addons.${ADDON}" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "addons.\"${ADDON}\"" "" "${USER_CONFIG_FILE}"
   done
   ADDONSINFO="$(readConfigEntriesArray "addons" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "Addons" \
@@ -691,7 +697,7 @@ function extensionSelection() {
   writeConfigKey "extensions" "{}" "${USER_CONFIG_FILE}"
   for EXTENSION in ${resp}; do
     USEREXTENSIONS["${EXTENSION}"]=""
-    writeConfigKey "extensions.${EXTENSION}" "" "${USER_CONFIG_FILE}"
+    writeConfigKey "extensions.\"${EXTENSION}\"" "" "${USER_CONFIG_FILE}"
   done
   EXTENSIONSINFO="$(readConfigEntriesArray "extensions" "${USER_CONFIG_FILE}")"
   dialog --backtitle "$(backtitle)" --title "DSM Extensions" \
@@ -746,7 +752,7 @@ function modulesMenu() {
         writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
         for ID in ${KOLIST[@]}; do
           USERMODULES["${ID}"]=""
-          writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
+          writeConfigKey "modules.\"${ID}\"" "" "${USER_CONFIG_FILE}"
         done
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
@@ -759,7 +765,7 @@ function modulesMenu() {
         writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
         while read -r ID DESC; do
           USERMODULES["${ID}"]=""
-          writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
+          writeConfigKey "modules.\"${ID}\"" "" "${USER_CONFIG_FILE}"
         done <<<${ALLMODULES}
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
@@ -791,7 +797,7 @@ function modulesMenu() {
         writeConfigKey "modules" "{}" "${USER_CONFIG_FILE}"
         for ID in ${resp}; do
           USERMODULES["${ID}"]=""
-          writeConfigKey "modules.${ID}" "" "${USER_CONFIG_FILE}"
+          writeConfigKey "modules.\"${ID}\"" "" "${USER_CONFIG_FILE}"
         done
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
@@ -865,14 +871,14 @@ function cmdlineMenu() {
           2>"${TMP_PATH}/resp"
         [ $? -ne 0 ] && continue
         NAME="$(sed 's/://g' <"${TMP_PATH}/resp")"
-        [ -z "${NAME}" ] && continue
+        [ -z "${NAME//\"/}" ] && continue
         dialog --backtitle "$(backtitle)" --title "User cmdline" \
           --inputbox "Type a value of '${NAME}' cmdline" 0 0 "${CMDLINE[${NAME}]}" \
           2>"${TMP_PATH}/resp"
         [ $? -ne 0 ] && continue
         VALUE="$(<"${TMP_PATH}/resp")"
         CMDLINE[${NAME}]="${VALUE}"
-        writeConfigKey "cmdline.${NAME}" "${VALUE}" "${USER_CONFIG_FILE}"
+        writeConfigKey "cmdline.\"${NAME//\"/}\"" "${VALUE}" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
@@ -893,7 +899,7 @@ function cmdlineMenu() {
         [ -z "${resp}" ] && continue
         for I in ${resp}; do
           unset 'CMDLINE[${I}]'
-          deleteConfigKey "cmdline.${I}" "${USER_CONFIG_FILE}"
+          deleteConfigKey "cmdline.\"${I}\"" "${USER_CONFIG_FILE}"
         done
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
@@ -1062,14 +1068,14 @@ function synoinfoMenu() {
           2>"${TMP_PATH}/resp"
         [ $? -ne 0 ] && continue
         NAME="$(<"${TMP_PATH}/resp")"
-        [ -z "${NAME}" ] && continue
+        [ -z "${NAME//\"/}" ] && continue
         dialog --backtitle "$(backtitle)" --title "Synoinfo entries" \
           --inputbox "Type a value of '${NAME}' entry" 0 0 "${SYNOINFO[${NAME}]}" \
           2>"${TMP_PATH}/resp"
         [ $? -ne 0 ] && continue
         VALUE="$(<"${TMP_PATH}/resp")"
         SYNOINFO[${NAME}]="${VALUE}"
-        writeConfigKey "synoinfo.${NAME}" "${VALUE}" "${USER_CONFIG_FILE}"
+        writeConfigKey "synoinfo.\"${NAME//\"/}\"" "${VALUE}" "${USER_CONFIG_FILE}"
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
         ;;
@@ -1090,7 +1096,7 @@ function synoinfoMenu() {
         [ -z "${resp}" ] && continue
         for I in ${resp}; do
           unset 'SYNOINFO[${I}]'
-          deleteConfigKey "synoinfo.${I}" "${USER_CONFIG_FILE}"
+          deleteConfigKey "synoinfo.\"${I}\"" "${USER_CONFIG_FILE}"
         done
         writeConfigKey "arc.builddone" "false" "${USER_CONFIG_FILE}"
         BUILDDONE="$(readConfigKey "arc.builddone" "${USER_CONFIG_FILE}")"
@@ -2452,17 +2458,17 @@ function formatdisks() {
     echo "${POSITION}" | grep -q "${LOADER_DEVICE_NAME}" && continue
     echo "\"${POSITION}\" \"${NAME}\" \"off\"" >>"${TMP_PATH}/opts"
   done < <(ls -l /dev/disk/by-id/ | sed 's|../..|/dev|g' | grep -E "/dev/sd|/dev/nvme" | awk -F' ' '{print $NF" "$(NF-2)}' | sort -uk 1,1)
-  dialog --backtitle "$(backtitle)" --colors --title "Format" \
-    --checklist "Format Disks" 0 0 0 --file "${TMP_PATH}/opts" \
+  dialog --backtitle "$(backtitle)" --colors --title "Format Disks" \
+    --checklist "" 0 0 0 --file "${TMP_PATH}/opts" \
     2>${TMP_PATH}/resp
   [ $? -ne 0 ] && return 1
   resp=$(<"${TMP_PATH}/resp")
   [ -z "${resp}" ] && return 1
-  dialog --backtitle "$(backtitle)" --colors --title "Format" \
+  dialog --backtitle "$(backtitle)" --colors --title "Format Disks" \
     --yesno "Warning:\nThis operation is irreversible. Please backup important data. Do you want to continue?" 0 0
   [ $? -ne 0 ] && return 1
   if [ $(ls /dev/md* | wc -l) -gt 0 ]; then
-    dialog --backtitle "$(backtitle)" --colors --title "Format" \
+    dialog --backtitle "$(backtitle)" --colors --title "Format Disks" \
       --yesno "Warning:\nThe current hds is in raid, do you still want to format them?" 0 0
     [ $? -ne 0 ] && return 1
     for I in $(ls /dev/md*); do
@@ -2473,9 +2479,9 @@ function formatdisks() {
     for I in ${resp}; do
       echo y | mkfs.ext4 -T largefile4 "${I}" 2>&1
     done
-  ) 2>&1 | dialog --backtitle "$(backtitle)" --colors --title "Format" \
+  ) 2>&1 | dialog --backtitle "$(backtitle)" --colors --title "Format Disks" \
     --progressbox "Formatting ..." 20 70
-  dialog --backtitle "$(backtitle)" --colors --title "Format" \
+  dialog --backtitle "$(backtitle)" --colors --title "Format Disks" \
     --msgbox "Formatting is complete." 0 0
 }
 
@@ -2598,7 +2604,6 @@ while true; do
         echo "h \"USB Port Config \" "                                                      >>"${TMP_PATH}/menu"
       fi
       echo ". \"DHCP/Static Loader IP \" "                                                  >>"${TMP_PATH}/menu"
-      echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
     if [ "${ADVOPTS}" = "true" ]; then
       echo "6 \"\Z1Hide Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
@@ -2610,7 +2615,6 @@ while true; do
       echo "j \"Cmdline \" "                                                                >>"${TMP_PATH}/menu"
       echo "k \"Synoinfo \" "                                                               >>"${TMP_PATH}/menu"
       echo "l \"Edit User Config \" "                                                       >>"${TMP_PATH}/menu"
-      echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
     if [ "${BOOTOPTS}" = "true" ]; then
       echo "7 \"\Z1Hide Boot Options\Zn \" "                                                >>"${TMP_PATH}/menu"
@@ -2628,7 +2632,6 @@ while true; do
       if [ ${BOOTCOUNT} -gt 0 ]; then
         echo "r \"Reset Bootcount: \Z4${BOOTCOUNT}\Zn \" "                                  >>"${TMP_PATH}/menu"
       fi
-      echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
     if [ "${DSMOPTS}" = "true" ]; then
       echo "8 \"\Z1Hide DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
@@ -2643,7 +2646,6 @@ while true; do
       echo "/ \"Sort Drives: \Z4${HDDSORT}\Zn \" "                                          >>"${TMP_PATH}/menu"
       echo "o \"Switch MacSys: \Z4${MACSYS}\Zn \" "                                         >>"${TMP_PATH}/menu"
       echo "u \"Switch LKM version: \Z4${LKM}\Zn \" "                                       >>"${TMP_PATH}/menu"
-      echo "= \"\Z4=========================\Zn \" "                                        >>"${TMP_PATH}/menu"
     fi
   fi
   if [ "${DEVOPTS}" = "true" ]; then
@@ -2652,12 +2654,11 @@ while true; do
     echo "9 \"\Z1Show Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
   fi
   if [ "${DEVOPTS}" = "true" ]; then
-    echo "= \"\Z4========== Dev ==========\Zn \" "                                          >>"${TMP_PATH}/menu"
+    echo "= \"\Z4========== Dev ===========\Zn \" "                                         >>"${TMP_PATH}/menu"
     echo "v \"Save Modifications to Disk \" "                                               >>"${TMP_PATH}/menu"
     echo "n \"Edit Grub Config \" "                                                         >>"${TMP_PATH}/menu"
     echo "w \"Reset Loader \" "                                                             >>"${TMP_PATH}/menu"
     echo "+ \"\Z1Format Disk(s)\Zn \" "                                                     >>"${TMP_PATH}/menu"
-    echo "= \"\Z4=========================\Zn \" "                                          >>"${TMP_PATH}/menu"
   fi
   echo "= \"\Z4===== Loader Settings ====\Zn \" "                                           >>"${TMP_PATH}/menu"
   echo "x \"Backup/Restore/Recovery \" "                                                    >>"${TMP_PATH}/menu"
@@ -2680,6 +2681,7 @@ while true; do
     b) addonMenu; NEXT="b" ;;
     c) extensionMenu; NEXT="c" ;;
     d) modulesMenu; NEXT="d" ;;
+    !) fixSelection; NEXT="!" ;;
     # Arc Section
     5) [ "${ARCOPTS}" = "true" ] && ARCOPTS='false' || ARCOPTS='true'
        ARCOPTS="${ARCOPTS}"
