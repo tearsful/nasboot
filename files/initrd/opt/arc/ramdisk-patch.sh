@@ -116,7 +116,7 @@ rm -rf "${TMP_PATH}/modules"
 mkdir -p "${TMP_PATH}/modules"
 tar -zxf "${MODULES_PATH}/${PLATFORM}-${KVER}.tgz" -C "${TMP_PATH}/modules"
 for F in $(ls "${TMP_PATH}/modules/"*.ko); do
-  M="$(basename ${F})"
+  M=$(basename ${F})
   [ "${ODP}" = "true" ] && [ -f "${RAMDISK_PATH}/usr/lib/modules/${M}" ] && continue
   if arrayExistItem "${M:0:-3}" "${!USERMODULES[@]}"; then
     cp -f "${F}" "${RAMDISK_PATH}/usr/lib/modules/${M}"
@@ -134,9 +134,6 @@ cp -f "${PATCH_PATH}/iosched-trampoline.sh" "${RAMDISK_PATH}/usr/sbin/modprobe"
 # Copying LKM to /usr/lib/modules
 gzip -dc "${LKM_PATH}/rp-${PLATFORM}-${KVER}-${LKM}.ko.gz" >"${RAMDISK_PATH}/usr/lib/modules/rp.ko"
 
-# Check if model needs Device-tree dynamic patch
-# DT="$(readModelKey "${MODEL}" "dt")"
-
 # Addons
 mkdir -p "${RAMDISK_PATH}/addons"
 echo "#!/bin/sh" >"${RAMDISK_PATH}/addons/addons.sh"
@@ -149,7 +146,7 @@ echo "export LAYOUT=${LAYOUT}" >>"${RAMDISK_PATH}/addons/addons.sh"
 echo "export KEYMAP=${KEYMAP}" >>"${RAMDISK_PATH}/addons/addons.sh"
 chmod +x "${RAMDISK_PATH}/addons/addons.sh"
 
-# Required addons: restore
+# Required Addons: revert
 installAddon revert
 echo "/addons/revert.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 
@@ -157,7 +154,6 @@ echo "/addons/revert.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FI
 installAddon eudev
 echo "/addons/eudev.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon disks
-#echo "/addons/disks.sh \${1} ${DT}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 echo "/addons/disks.sh \${1} ${HDDSORT}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 installAddon localrss
 echo "/addons/localrss.sh \${1} " >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
@@ -186,12 +182,17 @@ for EXTENSION in ${!EXTENSIONS[@]}; do
   echo "/addons/${EXTENSION}.sh \${1} ${PARAMS}" >>"${RAMDISK_PATH}/addons/addons.sh" 2>"${LOG_FILE}" || dieLog
 done
 
+# Enable Telnet
+echo "inetd" >>"${RAMDISK_PATH}/addons/addons.sh"
+
+[ "2" = "${BUILDNUM:0:1}" ] && sed -i 's/function //g' $(find "${RAMDISK_PATH}/addons/" -type f -name "*.sh")
+
 # Build modules dependencies
-${ARC_PATH}/depmod -a -b "${RAMDISK_PATH}" 2>/dev/null
+${ARC_PATH}/depmod -a -b ${RAMDISK_PATH} 2>/dev/null
 
 # Network card configuration file
 for N in $(seq 0 7); do
-  echo -e "DEVICE=eth${N}\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=off" >"${RAMDISK_PATH}/etc/sysconfig/network-scripts/ifcfg-eth${N}"
+  echo -e "DEVICE=eth${N}\nBOOTPROTO=dhcp\nONBOOT=yes\nIPV6INIT=dhcp\nIPV6_ACCEPT_RA=1" >"${RAMDISK_PATH}/etc/sysconfig/network-scripts/ifcfg-eth${N}"
 done
 
 # Reassembly ramdisk
