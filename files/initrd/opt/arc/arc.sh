@@ -2224,6 +2224,35 @@ function sysinfo() {
 }
 
 ###############################################################################
+# Shows Systeminfo to user
+function credits() {
+  # Print Credits Informations
+  TEXT=""
+  TEXT+="\n\Z4> Arc Loader:\Zn"
+  TEXT+="\n  Github: \Zbhttps://github.com/AuxXxilium\Zn"
+  TEXT+="\n  Website: \Zbhttps://auxxxilium.tech\Zn"
+  TEXT+="\n"
+  TEXT+="\n\Z4>> Developer:\Zn"
+  TEXT+="\n   Arc Loader: \ZbAuxXxilium\Zn"
+  TEXT+="\n"
+  TEXT+="\n\Z4>> Based on:\Zn"
+  TEXT+="\n   Redpill: \ZbTTG / Pocopico\Zn"
+  TEXT+="\n   ARPL: \Zbfbelavenuto / wjz304\Zn"
+  TEXT+="\n   CPU Info: \ZbFOXBI\Zn"
+  TEXT+="\n   System: \ZbBuildroot\Zn"
+  TEXT+="\n"
+  TEXT+="\n\Z4>> Note:\Zn"
+  TEXT+="\n   Arc and all Parts of this are"
+  TEXT+="\n   OpenSource and commercial use is"
+  TEXT+="\n   not permitted! The Loader is FREE"
+  TEXT+="\n   and it is forbidden to sell Arc"
+  TEXT+="\n   or Parts of this."
+  TEXT+="\n"
+  dialog --backtitle "$(backtitle)" --colors --title "Credits" \
+    --msgbox "${TEXT}" 0 0
+}
+
+###############################################################################
 # allow setting Static IP for DSM
 function staticIPMenu() {
   mkdir -p "${TMP_PATH}/sdX1"
@@ -2569,9 +2598,9 @@ while true; do
     echo "c \"DSM Extensions \" "                                                           >>"${TMP_PATH}/menu"
     echo "d \"DSM Modules \" "                                                              >>"${TMP_PATH}/menu"
     if [ "${ARCOPTS}" = "true" ]; then
-      echo "5 \"\Z1Hide Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
+      echo "4 \"\Z1Hide Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     else
-      echo "5 \"\Z1Show Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
+      echo "4 \"\Z1Show Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     fi
     if [ "${ARCOPTS}" = "true" ]; then
       echo "= \"\Z4========== Arc ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
@@ -2585,9 +2614,9 @@ while true; do
       echo ". \"DHCP/Static Loader IP \" "                                                  >>"${TMP_PATH}/menu"
     fi
     if [ "${ADVOPTS}" = "true" ]; then
-      echo "6 \"\Z1Hide Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
+      echo "5 \"\Z1Hide Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
     else
-      echo "6 \"\Z1Show Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
+      echo "5 \"\Z1Show Advanced Options\Zn \" "                                            >>"${TMP_PATH}/menu"
     fi
     if [ "${ADVOPTS}" = "true" ]; then
       echo "= \"\Z4======== Advanced =======\Zn \" "                                        >>"${TMP_PATH}/menu"
@@ -2596,9 +2625,9 @@ while true; do
       echo "l \"Edit User Config \" "                                                       >>"${TMP_PATH}/menu"
     fi
     if [ "${BOOTOPTS}" = "true" ]; then
-      echo "7 \"\Z1Hide Boot Options\Zn \" "                                                >>"${TMP_PATH}/menu"
+      echo "6 \"\Z1Hide Boot Options\Zn \" "                                                >>"${TMP_PATH}/menu"
     else
-      echo "7 \"\Z1Show Boot Options\Zn \" "                                                >>"${TMP_PATH}/menu"
+      echo "6 \"\Z1Show Boot Options\Zn \" "                                                >>"${TMP_PATH}/menu"
     fi
     if [ "${BOOTOPTS}" = "true" ]; then
       echo "= \"\Z4========== Boot =========\Zn \" "                                        >>"${TMP_PATH}/menu"
@@ -2613,9 +2642,9 @@ while true; do
       fi
     fi
     if [ "${DSMOPTS}" = "true" ]; then
-      echo "8 \"\Z1Hide DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
+      echo "7 \"\Z1Hide DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     else
-      echo "8 \"\Z1Show DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
+      echo "7 \"\Z1Show DSM Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     fi
     if [ "${DSMOPTS}" = "true" ]; then
       echo "= \"\Z4========== DSM ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
@@ -2628,9 +2657,9 @@ while true; do
     fi
   fi
   if [ "${DEVOPTS}" = "true" ]; then
-    echo "9 \"\Z1Hide Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
+    echo "8 \"\Z1Hide Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
   else
-    echo "9 \"\Z1Show Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
+    echo "8 \"\Z1Show Dev Options\Zn \" "                                                   >>"${TMP_PATH}/menu"
   fi
   if [ "${DEVOPTS}" = "true" ]; then
     echo "= \"\Z4========== Dev ===========\Zn \" "                                         >>"${TMP_PATH}/menu"
@@ -2643,6 +2672,7 @@ while true; do
   echo "x \"Backup/Restore/Recovery \" "                                                    >>"${TMP_PATH}/menu"
   echo "y \"Choose a keymap \" "                                                            >>"${TMP_PATH}/menu"
   echo "z \"Update \" "                                                                     >>"${TMP_PATH}/menu"
+  echo "9 \"Credits \" "                                                                     >>"${TMP_PATH}/menu"
   echo "0 \"\Z1Exit\Zn \" "                                                                 >>"${TMP_PATH}/menu"
 
   dialog --clear --default-item ${NEXT} --backtitle "$(backtitle)" --colors \
@@ -2662,9 +2692,9 @@ while true; do
     d) modulesMenu; NEXT="d" ;;
     !) fixSelection; NEXT="!" ;;
     # Arc Section
-    5) [ "${ARCOPTS}" = "true" ] && ARCOPTS='false' || ARCOPTS='true'
+    4) [ "${ARCOPTS}" = "true" ] && ARCOPTS='false' || ARCOPTS='true'
        ARCOPTS="${ARCOPTS}"
-       NEXT="5"
+       NEXT="4"
        ;;
     e) ONLYVERSION="true" && arcbuild; NEXT="e" ;;
     f) networkMenu; NEXT="f" ;;
@@ -2673,17 +2703,17 @@ while true; do
     h) usbMenu; NEXT="h" ;;
     .) staticIPMenu; NEXT="." ;;
     # Advanced Section
-    6) [ "${ADVOPTS}" = "true" ] && ADVOPTS='false' || ADVOPTS='true'
+    5) [ "${ADVOPTS}" = "true" ] && ADVOPTS='false' || ADVOPTS='true'
        ADVOPTS="${ADVOPTS}"
-       NEXT="6"
+       NEXT="5"
        ;;
     j) cmdlineMenu; NEXT="j" ;;
     k) synoinfoMenu; NEXT="k" ;;
     l) editUserConfig; NEXT="l" ;;
     # Boot Section
-    7) [ "${BOOTOPTS}" = "true" ] && BOOTOPTS='false' || BOOTOPTS='true'
+    6) [ "${BOOTOPTS}" = "true" ] && BOOTOPTS='false' || BOOTOPTS='true'
        ARCOPTS="${BOOTOPTS}"
-       NEXT="7"
+       NEXT="6"
        ;;
     m) [ "${KERNELLOAD}" = "kexec" ] && KERNELLOAD='power' || KERNELLOAD='kexec'
       writeConfigKey "arc.kernelload" "${KERNELLOAD}" "${USER_CONFIG_FILE}"
@@ -2703,9 +2733,9 @@ while true; do
       NEXT="r"
       ;;
     # DSM Section
-    8) [ "${DSMOPTS}" = "true" ] && DSMOPTS='false' || DSMOPTS='true'
+    7) [ "${DSMOPTS}" = "true" ] && DSMOPTS='false' || DSMOPTS='true'
       DSMOPTS="${DSMOPTS}"
-      NEXT="8"
+      NEXT="7"
       ;;
     s) downgradeMenu; NEXT="s" ;;
     t) resetPassword; NEXT="t" ;;
@@ -2735,18 +2765,19 @@ while true; do
       NEXT="u"
       ;;
     # Dev Section
-    9) [ "${DEVOPTS}" = "true" ] && DEVOPTS='false' || DEVOPTS='true'
+    8) [ "${DEVOPTS}" = "true" ] && DEVOPTS='false' || DEVOPTS='true'
       DEVOPTS="${DEVOPTS}"
-      NEXT="9"
+      NEXT="8"
       ;;
     v) saveMenu; NEXT="v" ;;
     n) editGrubCfg; NEXT="n" ;;
     w) resetLoader; NEXT="w" ;;
     +) formatdisks; NEXT="+" ;;
     # Loader Settings
-    x) backupMenu; NEXT="t" ;;
-    y) keymapMenu; NEXT="c" ;;
-    z) updateMenu; NEXT="e" ;;
+    x) backupMenu; NEXT="x" ;;
+    y) keymapMenu; NEXT="y" ;;
+    z) updateMenu; NEXT="z" ;;
+    9) credits; NEXT="9" ;;
     0) break ;;
   esac
 done
