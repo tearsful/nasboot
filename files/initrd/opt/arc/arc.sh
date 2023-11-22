@@ -132,9 +132,9 @@ function arcMenu() {
         DISKS="$(readModelKey "${M}" "disks")-Bay"
         ARCCONF="$(readModelKey "${M}" "arc.serial")"
         if [ -n "${ARCCONF}" ]; then
-          ARCAV="Arc"
+          ARCAV=""
         else
-          ARCAV="NonArc"
+          ARCAV=""
         fi
         if [[ "${PLATFORM}" = "r1000" || "${PLATFORM}" = "v1000" || "${PLATFORM}" = "epyc7002" ]]; then
           CPU="AMD"
@@ -230,7 +230,7 @@ function arcbuild() {
   fi
   PRODUCTVER="$(readConfigKey "productver" "${USER_CONFIG_FILE}")"
   KVER="$(readModelKey "${MODEL}" "productvers.[${PRODUCTVER}].kver")"
-  dialog --backtitle "$(backtitle)" --title "Arc Config" \
+  dialog --backtitle "$(backtitle)" --title "Boot Config" \
     --infobox "Reconfiguring Synoinfo, Addons and Modules" 0 0
   # Delete synoinfo and reload model/build synoinfo
   writeConfigKey "synoinfo" "{}" "${USER_CONFIG_FILE}"
@@ -277,9 +277,9 @@ function arcsettings() {
   elif [[ "${ARCRECOVERY}" != "true" && -n "${ARCCONF}" ]]; then
     dialog --clear --backtitle "$(backtitle)" --title "Dsm Patch Model"\
       --menu "Do you want to use Syno Services?" 7 50 0 \
-      1 "Yes - Install with Default Patch" \
-      2 "No - Install with random Serial/Mac" \
-      3 "Fix - Install with Custom Serial/Mac" \
+      1 "First - Install with Default Patch" \
+      2 "Custom - Install with Custom Serial/Mac" \
+      3 "Fix - Install with Virtio Serial/Mac(PVE\EXSI)" \
     2>"${TMP_PATH}/resp"
     resp="$(<"${TMP_PATH}/resp")"
     [ -z "${resp}" ] && return 1
@@ -2333,7 +2333,7 @@ while true; do
   echo "0 \"\Z1Exit\Zn \" "                                                                 >>"${TMP_PATH}/menu"
 
   dialog --clear --default-item ${NEXT} --backtitle "$(backtitle)" --colors \
-    --title "Arc Menu" --menu "" 0 0 0 --file "${TMP_PATH}/menu" \
+    --title "Boot Menu" --menu "" 0 0 0 --file "${TMP_PATH}/menu" \
     2>"${TMP_PATH}/resp"
   [ $? -ne 0 ] && break
   case $(<"${TMP_PATH}/resp") in
