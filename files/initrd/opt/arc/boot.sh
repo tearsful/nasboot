@@ -14,7 +14,7 @@ BUS=$(getBus "${LOADER_DISK}")
 # Print text centralized
 clear
 COLUMNS=${COLUMNS:-50}
-TITLE="${ARC_TITLE}"
+TITLE="Nas Loader"
 printf "\033[1;30m%*s\n" ${COLUMNS} ""
 printf "\033[1;30m%*s\033[A\n" ${COLUMNS} ""
 printf "\033[1;34m%*s\033[0m\n" $(((${#TITLE} + ${COLUMNS}) / 2)) "${TITLE}"
@@ -215,7 +215,7 @@ elif [ "${DIRECTBOOT}" = "false" ]; then
   w | awk '{print $1" "$2" "$4" "$5" "$6}' >WB
   MSG=""
   while test ${BOOTWAIT} -ge 0; do
-    MSG="$(printf "%2ds (Accessing Arc Overlay will interrupt Boot)" "${BOOTWAIT}")"
+    MSG="$(printf "%2ds (Accessing Booter Overlay will interrupt Boot)" "${BOOTWAIT}")"
     echo -en "\r${MSG}"
     w | awk '{print $1" "$2" "$4" "$5" "$6}' >WC
     if ! diff WB WC >/dev/null 2>&1; then

@@ -10,7 +10,7 @@ set -e
 # Shows title
 clear
 [ -z "${COLUMNS}" ] && COLUMNS=50
-TITLE="${ARC_TITLE}"
+TITLE="Nas Loader"
 printf "\033[1;30m%*s\n" ${COLUMNS} ""
 printf "\033[1;30m%*s\033[A\n" ${COLUMNS} ""
 printf "\033[1;34m%*s\033[0m\n" $(((${#TITLE} + ${COLUMNS}) / 2)) "${TITLE}"
@@ -170,10 +170,10 @@ done
 
 # Inform user
 echo
-echo -e "Call \033[1;34marc.sh\033[0m to configure loader"
+#echo -e "Call \033[1;34marc.sh\033[0m to configure loader"
 echo
-echo -e "User config is on \033[1;34m${USER_CONFIG_FILE}\033[0m"
-echo -e "Default SSH Root password is \033[1;34marc\033[0m"
+#echo -e "User config is on \033[1;34m${USER_CONFIG_FILE}\033[0m"
+#echo -e "Default SSH Root password is \033[1;34marc\033[0m"
 echo
 
 mkdir -p "${ADDONS_PATH}"
@@ -184,14 +184,14 @@ mkdir -p "${PATCH_PATH}"
 
 # Load arc
 updateAddons
-echo -e "\033[1;34mLoading Arc Loader Overlay...\033[0m"
+echo -e "\033[1;34mLoading Overlay...\033[0m"
 sleep 2
 
 # Check memory and load Arc
 RAM=$(free -m | grep -i mem | awk '{print$2}')
 if [ ${RAM} -le 3500 ]; then
   echo -e "\033[1;34mYou have less than 4GB of RAM, if errors occur in loader creation, please increase the amount of RAM.\033[0m\n"
-  echo -e "\033[1;34mUse arc.sh to proceed. Not recommended!\033[0m\n"
+  #echo -e "\033[1;34mUse arc.sh to proceed. Not recommended!\033[0m\n"
 else
   arc.sh
 fi
