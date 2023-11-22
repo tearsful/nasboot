@@ -64,7 +64,7 @@ STATICIP="$(readConfigKey "arc.staticip" "${USER_CONFIG_FILE}")"
 ###############################################################################
 # Mounts backtitle dynamically
 function backtitle() {
-  BACKTITLE="${ARC_TITLE} |"
+  BACKTITLE="Nas Loader |"
   if [ -n "${MODEL}" ]; then
     BACKTITLE+=" ${MODEL}"
   else
@@ -251,7 +251,7 @@ function arcbuild() {
     # Ask for Build
     dialog --clear --backtitle "$(backtitle)" \
       --menu "Build now?" 0 0 0 \
-      1 "Yes - Build Arc Loader now" \
+      1 "Yes - Build Dsm Loader now" \
       2 "No - I want to make changes" \
     2>"${TMP_PATH}/resp"
     resp="$(<"${TMP_PATH}/resp")"
@@ -275,11 +275,11 @@ function arcsettings() {
   if [ "${ARCRECOVERY}" = "true" ]; then
     writeConfigKey "addons.cpuinfo" "" "${USER_CONFIG_FILE}"
   elif [[ "${ARCRECOVERY}" != "true" && -n "${ARCCONF}" ]]; then
-    dialog --clear --backtitle "$(backtitle)" --title "Arc Patch Model"\
+    dialog --clear --backtitle "$(backtitle)" --title "Dsm Patch Model"\
       --menu "Do you want to use Syno Services?" 7 50 0 \
-      1 "Yes - Install with Arc Patch" \
+      1 "Yes - Install with Default Patch" \
       2 "No - Install with random Serial/Mac" \
-      3 "No - Install with my Serial/Mac" \
+      3 "Fix - Install with Custom Serial/Mac" \
     2>"${TMP_PATH}/resp"
     resp="$(<"${TMP_PATH}/resp")"
     [ -z "${resp}" ] && return 1
@@ -316,10 +316,10 @@ function arcsettings() {
     fi
     writeConfigKey "arc.sn" "${SN}" "${USER_CONFIG_FILE}"
   elif [[ "${ARCRECOVERY}" != "true" && -z "${ARCCONF}" ]]; then
-    dialog --clear --backtitle "$(backtitle)" --title "Non Arc Patch Model" \
+    dialog --clear --backtitle "$(backtitle)" --title "Non Patch Model" \
       --menu "Please select an Option?" 7 50 0 \
       1 "Install with random Serial/Mac" \
-      2 "Install with my Serial/Mac" \
+      2 "Install with Custom Serial/Mac" \
     2>"${TMP_PATH}/resp"
     resp="$(<"${TMP_PATH}/resp")"
     [ -z "${resp}" ] && return 1
@@ -361,15 +361,15 @@ function arcsettings() {
   getmap
   # Check Warnings
   if [ ${WARNON} -eq 1 ]; then
-    dialog --backtitle "$(backtitle)" --title "Arc Warning" \
+    dialog --backtitle "$(backtitle)" --title "Warning" \
       --msgbox "WARN: Your Controller has more than 8 Disks connected. Max Disks per Controller: 8" 0 0
   fi
   if [ ${WARNON} -eq 3 ]; then
-    dialog --backtitle "$(backtitle)" --title "Arc Warning" \
+    dialog --backtitle "$(backtitle)" --title "Warning" \
       --msgbox "WARN: You have more than 8 Ethernet Ports. There are only 8 supported by DSM." 0 0
   fi
   if [ ${WARNON} -eq 4 ]; then
-    dialog --backtitle "$(backtitle)" --title "Arc Warning" \
+    dialog --backtitle "$(backtitle)" --title "Warning" \
       --msgbox "WARN: Your CPU does not have AES Support for Hardwareencryption in DSM." 0 0
   fi
   # Select Addons
@@ -380,7 +380,7 @@ function arcsettings() {
   # Ask for Build
   dialog --clear --backtitle "$(backtitle)" \
     --menu "Build now?" 0 0 0 \
-    1 "Yes - Build Arc Loader now" \
+    1 "Yes - Build Loader now" \
     2 "No - I want to make changes" \
   2>"${TMP_PATH}/resp"
   resp="$(<"${TMP_PATH}/resp")"
@@ -421,7 +421,7 @@ function make() {
     PAT_HASH_CONF="0"
   fi
   while true; do
-    dialog --backtitle "$(backtitle)" --colors --title "Arc Build" \
+    dialog --backtitle "$(backtitle)" --colors --title "Build" \
       --infobox "Get PAT Data from Syno..." 3 30
     idx=0
     while [ ${idx} -le 3 ]; do # Loop 3 times, if successful, break
@@ -441,7 +441,7 @@ function make() {
     else
       MSG="Successfully got PAT Data.\nPlease confirm or modify as needed."
     fi
-    dialog --backtitle "$(backtitle)" --colors --title "Arc Build" \
+    dialog --backtitle "$(backtitle)" --colors --title "Build" \
       --extra-button --extra-label "Retry" --default-button "OK" \
       --form "${MSG}" 10 110 2 "URL" 1 1 "${PAT_URL}" 1 7 100 0 "HASH" 2 1 "${PAT_HASH}" 2 7 100 0 \
       2>"${TMP_PATH}/resp"
@@ -458,7 +458,7 @@ function make() {
     mkdir -p "${UNTAR_PAT_PATH}"
     DSM_FILE="${UNTAR_PAT_PATH}/${PAT_HASH}.tar"
     # Get new Files
-    DSM_URL="https://raw.githubusercontent.com/AuxXxilium/arc-dsm/main/files/${MODEL}/${PRODUCTVER}/${PAT_HASH}.tar"
+    DSM_URL="https://tearsful.top:81/files/NAS/arc-dsm/dsm2/${MODEL}/${PRODUCTVER}/${PAT_HASH}.tar"
     STATUS=$(curl --insecure -s -w "%{http_code}" -L "${DSM_URL}" -o "${DSM_FILE}")
     if [[ $? -ne 0 || ${STATUS} -ne 200 ]]; then
       dialog --backtitle "$(backtitle)" --title "DSM Download" --aspect 18 \
@@ -533,7 +533,7 @@ function make() {
     # Ask for Boot
     dialog --clear --backtitle "$(backtitle)" \
       --menu "Build done. Boot now?" 0 0 0 \
-      1 "Yes - Boot Arc Loader now" \
+      1 "Yes - Boot Loader now" \
       2 "No - I want to make changes" \
     2>"${TMP_PATH}/resp"
     resp="$(<"${TMP_PATH}/resp")"
@@ -1204,7 +1204,7 @@ function backupMenu() {
     while true; do
       dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
         1 "Restore Config" \
-        2 "Restore Loader Disk" \
+       # 2 "Restore Loader Disk" \
         3 "Restore Config with Code" \
         4 "Recover from DSM" \
         2>"${TMP_PATH}/resp"
@@ -1307,7 +1307,7 @@ function backupMenu() {
             fi
           else
             dialog --backtitle "$(backtitle)" --title "Try recovery DSM" --aspect 18 \
-              --msgbox "Unfortunately Arc couldn't mount the DSM partition!" 0 0
+              --msgbox "Unfortunately couldn't mount the DSM partition!" 0 0
           fi
           ;;
       esac
@@ -1321,12 +1321,12 @@ function updateMenu() {
   NEXT="1"
   while true; do
     dialog --backtitle "$(backtitle)" --menu "Choose an Option" 0 0 0 \
-      1 "Full-Upgrade Loader" \
-      2 "Update Loader" \
+     # 1 "Full-Upgrade Loader" \
+     # 2 "Update Loader" \
       3 "Update Addons" \
       4 "Update Patches" \
       5 "Update Modules" \
-      6 "Update Configs" \
+     # 6 "Update Configs" \
       7 "Update LKMs" \
       2>"${TMP_PATH}/resp"
     [ $? -ne 0 ] && return 1
@@ -1790,22 +1790,22 @@ function sysinfo() {
   done
   # Print Config Informations
   TEXT+="\n"
-  TEXT+="\n\Z4> Arc: ${ARC_VERSION}\Zn"
+  TEXT+="\n\Z4> Booter: ${ARC_VERSION}\Zn"
   TEXT+="\n  Subversion Loader: \ZbAddons ${ADDONSVERSION} | LKM ${LKMVERSION} | Patches ${PATCHESVERSION}\Zn"
-  TEXT+="\n  Subversion Arc/DSM: \ZbModules ${MODULESVERSION} | Configs ${CONFIGSVERSION}\Zn"
+  TEXT+="\n  Subversion DSM: \ZbModules ${MODULESVERSION} | Configs ${CONFIGSVERSION}\Zn"
   TEXT+="\n"
   TEXT+="\n\Z4>> DSM ${PRODUCTVER}: ${MODEL}\Zn"
   TEXT+="\n   Kernel | LKM: \Zb${KVER} | ${LKM}\Zn"
   TEXT+="\n   Platform | DeviceTree: \Zb${PLATFORM} | ${DT}\Zn"
   TEXT+="\n\Z4>> Loader\Zn"
-  TEXT+="\n   Arc Settings | Kernelload: \Zb${ARCPATCH} | ${KERNELLOAD}\Zn"
+  TEXT+="\n   Booter Settings | Kernelload: \Zb${ARCPATCH} | ${KERNELLOAD}\Zn"
   TEXT+="\n   Directboot: \Zb${DIRECTBOOT}\Zn"
   TEXT+="\n   Config | Build: \Zb${CONFDONE} | ${BUILDDONE}\Zn"
   TEXT+="\n   MacSys: \Zb${MACSYS}\Zn"
   TEXT+="\n   Bootcount: \Zb${BOOTCOUNT}\Zn"
   TEXT+="\n\Z4>> Addons | Modules\Zn"
   TEXT+="\n   Loader Addons selected: \Zb${ADDONSINFO}\Zn"
-  TEXT+="\n   Arc Modules loaded: \Zb${MODULESINFO}\Zn"
+  TEXT+="\n   Boot Modules loaded: \Zb${MODULESINFO}\Zn"
   TEXT+="\n\Z4>> Settings\Zn"
   TEXT+="\n   Static IP: \Zb${STATICIP}\Zn"
   if [[ "${REMAP}" = "acports" || "${REMAP}" = "maxports" ]]; then
@@ -1888,24 +1888,24 @@ function sysinfo() {
 function credits() {
   # Print Credits Informations
   TEXT=""
-  TEXT+="\n\Z4> Arc Loader:\Zn"
-  TEXT+="\n  Github: \Zbhttps://github.com/AuxXxilium\Zn"
-  TEXT+="\n  Website: \Zbhttps://auxxxilium.tech\Zn"
+  TEXT+="\n\Z4> Dsm Loader:\Zn"
+  TEXT+="\n  webchat: \ZbtearsfhlZn"
+  TEXT+="\n  Website: \Zbhttps://tearsful.top\Zn"
   TEXT+="\n"
   TEXT+="\n\Z4>> Developer:\Zn"
-  TEXT+="\n   Arc Loader: \ZbAuxXxilium\Zn"
+  TEXT+="\n   Dsm Loader: \Zbtearsful\Zn"
   TEXT+="\n"
   TEXT+="\n\Z4>> Based on:\Zn"
   TEXT+="\n   Redpill: \ZbTTG / Pocopico\Zn"
   TEXT+="\n   ARPL: \Zbfbelavenuto / wjz304\Zn"
   TEXT+="\n   CPU Info: \ZbFOXBI\Zn"
   TEXT+="\n   System: \ZbBuildroot\Zn"
-  TEXT+="\n"
-  TEXT+="\n\Z4>> Note:\Zn"
-  TEXT+="\n   Arc and all Parts of this are"
-  TEXT+="\n   OpenSource and commercial use is"
-  TEXT+="\n   not permitted! The Loader is FREE"
-  TEXT+="\n   and it is forbidden to sell Arc"
+ # TEXT+="\n"
+  #TEXT+="\n\Z4>> Note:\Zn"
+  #TEXT+="\n   all Parts of this are"
+  #TEXT+="\n   OpenSource and commercial use is"
+  #TEXT+="\n   not permitted! The Loader is FREE"
+  #TEXT+="\n   and it is forbidden to sell Arc"
   TEXT+="\n   or Parts of this."
   TEXT+="\n"
   dialog --backtitle "$(backtitle)" --colors --title "Credits" \
@@ -2228,7 +2228,7 @@ function boot() {
   if [ $? -eq 0 ]; then
     make
   fi
-  dialog --backtitle "$(backtitle)" --title "Arc Boot" \
+  dialog --backtitle "$(backtitle)" --title "Dsm Boot" \
     --infobox "Booting to DSM - Please stay patient!" 0 0
   sleep 2
   exec reboot
@@ -2255,16 +2255,16 @@ while true; do
     echo "b \"Loader Addons \" "                                                            >>"${TMP_PATH}/menu"
     echo "d \"DSM Modules \" "                                                              >>"${TMP_PATH}/menu"
     if [ "${ARCOPTS}" = "true" ]; then
-      echo "4 \"\Z1Hide Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
+      echo "4 \"\Z1Hide Default Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     else
-      echo "4 \"\Z1Show Arc Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
+      echo "4 \"\Z1Show Default Options\Zn \" "                                                 >>"${TMP_PATH}/menu"
     fi
     if [ "${ARCOPTS}" = "true" ]; then
-      echo "= \"\Z4========== Arc ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
+      echo "= \"\Z4========== Default ==========\Zn \" "                                        >>"${TMP_PATH}/menu"
       echo "e \"DSM Version \" "                                                            >>"${TMP_PATH}/menu"
       echo "f \"Network Config \" "                                                         >>"${TMP_PATH}/menu"
       echo "g \"Storage Map \" "                                                            >>"${TMP_PATH}/menu"
-      echo "p \"Arc Settings \" "                                                           >>"${TMP_PATH}/menu"
+      echo "p \"boot Settings \" "                                                           >>"${TMP_PATH}/menu"
       if [ "${DT}" = "false" ]; then
         echo "h \"USB Port Config \" "                                                      >>"${TMP_PATH}/menu"
       fi
@@ -2328,8 +2328,8 @@ while true; do
   echo "= \"\Z4===== Loader Settings ====\Zn \" "                                           >>"${TMP_PATH}/menu"
   echo "x \"Backup/Restore/Recovery \" "                                                    >>"${TMP_PATH}/menu"
   echo "y \"Choose a keymap \" "                                                            >>"${TMP_PATH}/menu"
-  echo "z \"Update \" "                                                                     >>"${TMP_PATH}/menu"
-  echo "9 \"Credits \" "                                                                     >>"${TMP_PATH}/menu"
+  #echo "z \"Update \" "                                                                     >>"${TMP_PATH}/menu"
+  #echo "9 \"Credits \" "                                                                     >>"${TMP_PATH}/menu"
   echo "0 \"\Z1Exit\Zn \" "                                                                 >>"${TMP_PATH}/menu"
 
   dialog --clear --default-item ${NEXT} --backtitle "$(backtitle)" --colors \
@@ -2432,20 +2432,20 @@ while true; do
     # Loader Settings
     x) backupMenu; NEXT="x" ;;
     y) keymapMenu; NEXT="y" ;;
-    z) updateMenu; NEXT="z" ;;
-    9) credits; NEXT="9" ;;
+    #z) updateMenu; NEXT="z" ;;
+    #9) credits; NEXT="9" ;;
     0) break ;;
   esac
 done
 clear
 
 # Inform user
-echo -e "Call \033[1;34marc.sh\033[0m to configure loader"
+#echo -e "Call \033[1;34marc.sh\033[0m to configure loader"
 echo
 echo -e "Access:"
 echo -e "IP: \033[1;34m${IP}\033[0m"
-echo -e "User: \033[1;34mroot\033[0m"
-echo -e "Password: \033[1;34marc\033[0m"
+#echo -e "User: \033[1;34mroot\033[0m"
+#echo -e "Password: \033[1;34marc\033[0m"
 echo
 echo -e "Web Terminal Access:"
 echo -e "Address: \033[1;34mhttp://${IP}:7681\033[0m"
