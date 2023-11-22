@@ -23,9 +23,9 @@ jobs:
       # Install Dependencies
       - name: Install Dependencies
         run: |
-          git config --global user.email "info@auxxxilium.tech"
-          git config --global user.name "AuxXxilium"
-          sudo timedatectl set-timezone "Europe/Berlin"
+          git config --global user.email "tearsful@gmail.com"
+          git config --global user.name "tearsful"
+          sudo timedatectl set-timezone "Asia/HongKong"
 
           # Clean up disk space
           docker rmi $(docker images -q)
