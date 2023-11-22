@@ -1,6 +1,6 @@
 
 ARC_VERSION="23.1.1"
-ARC_TITLE="Arc ${ARC_VERSION}"
+ARC_TITLE="Loader ${ARC_VERSION}"
 
 # Define paths
 PART1_PATH="/mnt/p1"
