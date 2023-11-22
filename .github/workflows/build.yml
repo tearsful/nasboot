@@ -5,7 +5,7 @@
 # See /LICENSE for more information.
 #
 
-name: Build Arc
+name: Build Loader
 
 on:
   workflow_dispatch:
@@ -51,9 +51,9 @@ jobs:
       # Install Dependencies
       - name: Install Dependencies
         run: |
-          git config --global user.email "info@auxxxilium.tech"
-          git config --global user.name "AuxXxilium"
-          sudo timedatectl set-timezone "Europe/Berlin"
+          git config --global user.email "tearsful@gmail.com"
+          git config --global user.name "tearsful"
+          sudo timedatectl set-timezone "Asia/HongKong"
 
           # Clean up disk space
           docker rmi $(docker images -q)
@@ -110,7 +110,7 @@ jobs:
         run: |
           . scripts/func.sh
 
-          echo "Create Arc Image"
+          echo "Create Loader Image"
           gzip -dc "files/grub.img.gz" >"arc.img"
           fdisk -l "arc.img"
           
@@ -146,7 +146,7 @@ jobs:
 
           sudo losetup --detach ${LOOPX}
 
-          echo "Create Arc_4GB Image"
+          echo "Create Loader_4GB Image"
           resizeImg "arc.img" "+3072M" "arc_4GB.img"
 
           echo "Image Converter"
