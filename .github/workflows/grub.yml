@@ -23,9 +23,9 @@ jobs:
 
       - name: Initialization environment
         run : |
-          git config --global user.email "info@auxxxilium.tech"
-          git config --global user.name "AuxXxilium"
-          sudo timedatectl set-timezone "Europe/Berlin"
+          git config --global user.email "tearsful@gmail.com"
+          git config --global user.name "tearsful"
+          sudo timedatectl set-timezone "Asia/HongKong"
 
           sudo apt update
           sudo apt install -y build-essential bison flex dosfstools
