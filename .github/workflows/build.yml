@@ -53,7 +53,7 @@ jobs:
         run: |
           git config --global user.email "tearsful@gmail.com"
           git config --global user.name "tearsful"
-          sudo timedatectl set-timezone "Asia/HongKong"
+          sudo timedatectl set-timezone "Asia/Shanghai"
 
           # Clean up disk space
           docker rmi $(docker images -q)
